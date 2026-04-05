@@ -1,0 +1,72 @@
+<!DOCTYPE html>
+<html>
+<head>
+  <meta name="viewport" content="width=device-width,initial-scale=1">
+  <title>Supabase Real-Time Notepad</title>
+  <style>
+    body { margin: 0; }
+    textarea {
+      width: 100%;
+      height: 100vh;
+      font-size: 18px;
+      padding: 20px;
+    }
+  </style>
+  <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+</head>
+<body>
+<textarea id="editor"></textarea>
+
+<script>
+const SUPABASE_URL = "https://woybepucedjblfirvfsm.supabase.co";
+const SUPABASE_KEY = "sb_publishable_qS6QjpFtlk5Cy1suMyPkFw_-De_tVv5";
+
+const PASSCODE = prompt("Enter passcode:");
+
+const supabase = Supabase.createClient(SUPABASE_URL, SUPABASE_KEY);
+
+const editor = document.getElementById("editor");
+let isLocalChange = false;
+
+// Load initial content
+async function loadNote() {
+  const { data } = await supabase
+    .from('notes')
+    .select('content')
+    .limit(1)
+    .single();
+  editor.value = data.content;
+}
+loadNote();
+
+// Subscribe to changes
+supabase
+  .channel('notes_channel')
+  .on(
+    'postgres_changes',
+    { event: '*', schema: 'public', table: 'notes' },
+    (payload) => {
+      if (!isLocalChange) {
+        editor.value = payload.new.content;
+      }
+    }
+  )
+  .subscribe();
+
+// Update note on input
+editor.addEventListener('input', async () => {
+  if (PASSCODE !== '1234') return; // simple passcode protection
+
+  isLocalChange = true;
+  const text = editor.value;
+
+  await supabase
+    .from('notes')
+    .update({ content: text })
+    .eq('id', 1);
+
+  setTimeout(() => { isLocalChange = false; }, 50);
+});
+</script>
+</body>
+</html>
