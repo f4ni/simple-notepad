@@ -33,18 +33,23 @@ async function loadNote() {
   const { data } = await supabase
     .from('notes')
     .select('content')
-    .limit(1)
+    .eq('id', 1)
     .single();
-  editor.value = data.content;
+
+  if (data) editor.value = data.content;
+  else {
+    // create row if not exists
+    await supabase.from('notes').insert({ id: 1, content: '' });
+  }
 }
 loadNote();
 
-// Subscribe to changes
+// Subscribe to row changes (realtime)
 supabase
   .channel('notes_channel')
   .on(
     'postgres_changes',
-    { event: '*', schema: 'public', table: 'notes' },
+    { event: '*', schema: 'public', table: 'notes', filter: 'id=eq.1' },
     (payload) => {
       if (!isLocalChange) {
         editor.value = payload.new.content;
