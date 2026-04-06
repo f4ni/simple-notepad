@@ -35,6 +35,77 @@
         color: var(--editor-text);
       }
 
+      button,
+      input,
+      select {
+        font: inherit;
+      }
+
+      .auth-screen {
+        min-height: 100vh;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        padding: 24px;
+      }
+
+      .auth-card {
+        width: min(420px, 100%);
+        background: var(--panel-bg);
+        backdrop-filter: blur(14px);
+        border: 1px solid var(--border-color);
+        border-radius: 20px;
+        padding: 28px;
+      }
+
+      .auth-card h1 {
+        margin: 0 0 8px;
+      }
+
+      .auth-card p {
+        margin: 0 0 20px;
+        opacity: 0.75;
+      }
+
+      .auth-form {
+        display: flex;
+        flex-direction: column;
+        gap: 12px;
+      }
+
+      .auth-form input,
+      .auth-form button,
+      .toolbar select,
+      .toolbar input[type="color"],
+      .toolbar button,
+      .new-note-button {
+        border: 1px solid var(--border-color);
+        border-radius: 10px;
+        background: var(--control-bg);
+        color: var(--control-text);
+      }
+
+      .auth-form input,
+      .auth-form button {
+        padding: 12px 14px;
+      }
+
+      .auth-toggle {
+        margin-top: 16px;
+        background: none;
+        border: 0;
+        padding: 0;
+        color: var(--toolbar-text);
+        cursor: pointer;
+        text-decoration: underline;
+      }
+
+      .auth-error {
+        min-height: 20px;
+        margin-top: 12px;
+        color: #b42318;
+      }
+
       .app-shell {
         display: grid;
         grid-template-columns: 280px 1fr;
@@ -64,20 +135,17 @@
         color: var(--sidebar-text);
       }
 
-      .new-note-button,
-      .toolbar select,
-      .toolbar input[type="color"],
-      .toolbar button {
-        border: 1px solid var(--border-color);
-        border-radius: 10px;
-        background: var(--control-bg);
-        color: var(--control-text);
-        font-size: 14px;
-      }
-
       .new-note-button {
         padding: 10px 12px;
         cursor: pointer;
+      }
+
+      .user-chip {
+        padding: 10px 12px;
+        border-radius: 12px;
+        background: var(--sidebar-active-bg);
+        color: var(--sidebar-text);
+        font-size: 14px;
       }
 
       .note-list {
@@ -149,7 +217,8 @@
         gap: 10px;
       }
 
-      .note-heading h2 {
+      .note-heading h2,
+      .session-status {
         margin: 0;
         font-size: 20px;
         color: var(--toolbar-text);
@@ -187,7 +256,8 @@
         color: var(--control-active-text);
       }
 
-      .rename-button {
+      .rename-button,
+      .logout-button {
         min-width: 40px;
         padding: 8px 10px;
       }
@@ -228,6 +298,10 @@
         color: var(--toolbar-text);
       }
 
+      [hidden] {
+        display: none !important;
+      }
+
       @media (max-width: 900px) {
         .app-shell {
           grid-template-columns: 1fr;
@@ -242,12 +316,27 @@
   </head>
 
   <body>
-    <div class="app-shell">
+    <section id="authScreen" class="auth-screen">
+      <div class="auth-card">
+        <h1 id="authTitle">Sign In</h1>
+        <p id="authSubtitle">Your notes stay private to your account.</p>
+        <form id="authForm" class="auth-form">
+          <input id="usernameInput" type="text" placeholder="Username" autocomplete="username" required />
+          <input id="passwordInput" type="password" placeholder="Password" autocomplete="current-password" required />
+          <button id="authSubmit" type="submit">Sign In</button>
+        </form>
+        <div id="authError" class="auth-error"></div>
+        <button id="authToggle" class="auth-toggle" type="button">Need an account? Register</button>
+      </div>
+    </section>
+
+    <div id="appShell" class="app-shell" hidden>
       <aside class="sidebar">
         <div class="sidebar-top">
           <h1 class="sidebar-title">Notes</h1>
           <button id="newNoteButton" class="new-note-button" type="button">New</button>
         </div>
+        <div id="userChip" class="user-chip"></div>
         <div id="noteList" class="note-list"></div>
       </aside>
 
@@ -275,16 +364,30 @@
           </label>
           <button id="boldToggle" type="button">B</button>
           <button id="underlineToggle" type="button">U</button>
+          <button id="logoutButton" class="logout-button" type="button">Log Out</button>
         </div>
         <div class="editor-area">
           <div id="editor" class="editor" contenteditable="true" data-placeholder="Start typing..."></div>
-          <div id="emptyState" class="empty-state" hidden>Create a note from the sidebar to get started.</div>
+          <div id="emptyState" class="empty-state" hidden>Create your first private note from the sidebar.</div>
         </div>
       </main>
     </div>
 
     <script>
     const STORAGE_KEY = "simple-notepad-preferences";
+    const SESSION_KEY = "simple-notepad-session";
+
+    const authScreen = document.getElementById("authScreen");
+    const appShell = document.getElementById("appShell");
+    const authTitle = document.getElementById("authTitle");
+    const authSubtitle = document.getElementById("authSubtitle");
+    const authForm = document.getElementById("authForm");
+    const usernameInput = document.getElementById("usernameInput");
+    const passwordInput = document.getElementById("passwordInput");
+    const authSubmit = document.getElementById("authSubmit");
+    const authToggle = document.getElementById("authToggle");
+    const authError = document.getElementById("authError");
+
     const editor = document.getElementById("editor");
     const noteList = document.getElementById("noteList");
     const newNoteButton = document.getElementById("newNoteButton");
@@ -296,11 +399,11 @@
     const backgroundPicker = document.getElementById("backgroundPicker");
     const boldToggle = document.getElementById("boldToggle");
     const underlineToggle = document.getElementById("underlineToggle");
+    const logoutButton = document.getElementById("logoutButton");
+    const userChip = document.getElementById("userChip");
     const clientId = crypto.randomUUID();
 
     let ws;
-    let passcode = "";
-    let isAuthenticated = false;
     let reconnectTimeoutId = null;
     let sendTimeoutId = null;
     let syncIntervalId = null;
@@ -308,6 +411,9 @@
     let notes = [];
     let activeNoteId = null;
     let activeNoteVersion = 0;
+    let sessionToken = localStorage.getItem(SESSION_KEY) || "";
+    let currentUser = null;
+    let authMode = "login";
 
     let preferences = {
       theme: "sand",
@@ -315,6 +421,16 @@
     };
 
     editor.contentEditable = "false";
+
+    function saveSession(token) {
+      sessionToken = token;
+
+      if (token) {
+        localStorage.setItem(SESSION_KEY, token);
+      } else {
+        localStorage.removeItem(SESSION_KEY);
+      }
+    }
 
     function savePreferences() {
       localStorage.setItem(STORAGE_KEY, JSON.stringify(preferences));
@@ -480,6 +596,34 @@
       applyPreferences();
     }
 
+    function setAuthMode(mode) {
+      authMode = mode;
+      authTitle.textContent = mode === "login" ? "Sign In" : "Create Account";
+      authSubtitle.textContent =
+        mode === "login"
+          ? "Your notes stay private to your account."
+          : "Create a username and password to keep your notes private.";
+      authSubmit.textContent = mode === "login" ? "Sign In" : "Register";
+      authToggle.textContent =
+        mode === "login" ? "Need an account? Register" : "Already have an account? Sign In";
+      passwordInput.autocomplete =
+        mode === "login" ? "current-password" : "new-password";
+      authError.textContent = "";
+    }
+
+    function showAuthScreen() {
+      authScreen.hidden = false;
+      appShell.hidden = true;
+      if (ws && ws.readyState === WebSocket.OPEN) {
+        ws.close();
+      }
+    }
+
+    function showApp() {
+      authScreen.hidden = true;
+      appShell.hidden = false;
+    }
+
     function formatUpdatedAt(updatedAt) {
       if (!updatedAt) {
         return "Just now";
@@ -515,10 +659,9 @@
 
     function setEmptyState(isEmpty) {
       emptyState.hidden = !isEmpty;
-      emptyState.style.display = isEmpty ? "flex" : "none";
       editor.hidden = isEmpty;
-      editor.style.display = isEmpty ? "none" : "block";
-      editor.contentEditable = isEmpty || !isAuthenticated || !activeNoteId ? "false" : "true";
+      editor.contentEditable =
+        isEmpty || !sessionToken || !activeNoteId ? "false" : "true";
       renameNoteButton.disabled = isEmpty || !activeNoteId;
     }
 
@@ -527,7 +670,7 @@
         activeNoteId = null;
         activeNoteVersion = 0;
         activeNoteTitle.textContent = "No note selected";
-        activeNoteMeta.textContent = "Create a note from the sidebar.";
+        activeNoteMeta.textContent = "Create your first private note from the sidebar.";
         setEditorMarkup("");
         setEmptyState(true);
         renderNotes();
@@ -540,16 +683,16 @@
       activeNoteMeta.textContent = `Last updated ${formatUpdatedAt(note.updatedAt)}`;
       setEditorMarkup(note.text || "");
       setEmptyState(false);
-      editor.contentEditable = isAuthenticated ? "true" : "false";
+      editor.contentEditable = sessionToken ? "true" : "false";
       renderNotes();
       updateFormattingButtons();
     }
 
     function upsertNoteSummary(note) {
-      const existingIndex = notes.findIndex((entry) => entry.id === note.id);
+      const index = notes.findIndex((entry) => entry.id === note.id);
 
-      if (existingIndex >= 0) {
-        notes[existingIndex] = { ...notes[existingIndex], ...note };
+      if (index >= 0) {
+        notes[index] = { ...notes[index], ...note };
       } else {
         notes.push(note);
       }
@@ -559,34 +702,65 @@
       });
     }
 
+    function clearSessionState() {
+      currentUser = null;
+      saveSession("");
+      notes = [];
+      activeNoteId = null;
+      activeNoteVersion = 0;
+      userChip.textContent = "";
+      setActiveNote(null);
+    }
+
     async function fetchJson(url, options = {}) {
       const response = await fetch(url, {
         ...options,
         headers: {
           "Content-Type": "application/json",
-          "x-notepad-passcode": passcode,
+          ...(sessionToken ? { authorization: `Bearer ${sessionToken}` } : {}),
           ...(options.headers || {}),
         },
       });
 
+      if (response.status === 401) {
+        clearSessionState();
+        showAuthScreen();
+        throw new Error("Unauthorized");
+      }
+
       if (!response.ok) {
-        throw new Error(`Request failed with status ${response.status}`);
+        const data = await response.json().catch(() => ({}));
+        throw new Error(data.error || `Request failed with status ${response.status}`);
       }
 
       return response.json();
     }
 
-    async function openNote(noteId) {
-      if (!passcode) {
+    async function hydrateSession() {
+      if (!sessionToken) {
+        showAuthScreen();
         return;
       }
 
+      try {
+        const data = await fetchJson("/api/auth/me");
+        currentUser = data.user;
+        userChip.textContent = `Signed in as ${currentUser.username}`;
+        showApp();
+        connect();
+      } catch (_error) {
+        clearSessionState();
+        showAuthScreen();
+      }
+    }
+
+    async function openNote(noteId) {
       const data = await fetchJson(`/api/notes/${noteId}`);
       setActiveNote(data.note);
     }
 
     async function refreshNotesList() {
-      if (!passcode) {
+      if (!sessionToken) {
         return;
       }
 
@@ -596,7 +770,7 @@
     }
 
     async function syncActiveNote() {
-      if (!passcode || !activeNoteId) {
+      if (!sessionToken || !activeNoteId) {
         return;
       }
 
@@ -609,11 +783,15 @@
 
     function scheduleReconnect() {
       clearTimeout(reconnectTimeoutId);
-      reconnectTimeoutId = setTimeout(connect, 1000);
+      reconnectTimeoutId = setTimeout(() => {
+        if (sessionToken) {
+          connect();
+        }
+      }, 1000);
     }
 
     function flushPendingText() {
-      if (!isAuthenticated || !activeNoteId || !ws || ws.readyState !== WebSocket.OPEN) {
+      if (!sessionToken || !activeNoteId || !ws || ws.readyState !== WebSocket.OPEN) {
         return;
       }
 
@@ -633,29 +811,23 @@
     }
 
     function connect() {
+      if (!sessionToken) {
+        return;
+      }
+
       const protocol = window.location.protocol === "https:" ? "wss:" : "ws:";
       ws = new WebSocket(`${protocol}//${window.location.host}`);
 
       ws.onopen = () => {
-        if (!passcode) {
-          passcode = prompt("Enter passcode:");
-
-          if (!passcode) {
-            alert("A passcode is required.");
-            ws.close();
-            return;
-          }
-        }
-
-        ws.send(JSON.stringify({ type: "auth", pass: passcode, clientId }));
+        ws.send(JSON.stringify({ type: "auth", token: sessionToken, clientId }));
       };
 
       ws.onmessage = (event) => {
         const data = JSON.parse(event.data);
 
         if (data.type === "init") {
-          isAuthenticated = true;
-          editor.contentEditable = "true";
+          currentUser = data.user;
+          userChip.textContent = `Signed in as ${currentUser.username}`;
           notes = data.notes || [];
           renderNotes();
           setActiveNote(data.activeNote);
@@ -715,15 +887,13 @@
         }
 
         if (data.type === "auth-error") {
-          alert("Incorrect passcode.");
-          passcode = "";
-          ws.close();
+          clearSessionState();
+          showAuthScreen();
         }
       };
 
       ws.onclose = () => {
         editor.contentEditable = "false";
-        isAuthenticated = false;
         scheduleReconnect();
       };
 
@@ -732,8 +902,38 @@
       };
     }
 
+    authForm.addEventListener("submit", async (event) => {
+      event.preventDefault();
+      authError.textContent = "";
+
+      const username = usernameInput.value.trim();
+      const password = passwordInput.value;
+      const endpoint =
+        authMode === "login" ? "/api/auth/login" : "/api/auth/register";
+
+      try {
+        const data = await fetchJson(endpoint, {
+          method: "POST",
+          body: JSON.stringify({ username, password }),
+        });
+
+        saveSession(data.token);
+        currentUser = data.user;
+        userChip.textContent = `Signed in as ${currentUser.username}`;
+        passwordInput.value = "";
+        showApp();
+        connect();
+      } catch (error) {
+        authError.textContent = error.message;
+      }
+    });
+
+    authToggle.addEventListener("click", () => {
+      setAuthMode(authMode === "login" ? "register" : "login");
+    });
+
     editor.addEventListener("input", () => {
-      if (!isAuthenticated || !activeNoteId) {
+      if (!sessionToken || !activeNoteId) {
         return;
       }
 
@@ -780,10 +980,6 @@
     });
 
     newNoteButton.addEventListener("click", async () => {
-      if (!passcode) {
-        return;
-      }
-
       const title = prompt("Name your new note:");
 
       if (!title) {
@@ -809,11 +1005,13 @@
     });
 
     renameNoteButton.addEventListener("click", async () => {
-      if (!activeNoteId || !passcode) {
+      if (!activeNoteId) {
         return;
       }
 
-      const currentTitle = notes.find((note) => note.id === activeNoteId)?.title || activeNoteTitle.textContent;
+      const currentTitle =
+        notes.find((note) => note.id === activeNoteId)?.title ||
+        activeNoteTitle.textContent;
       const nextTitle = prompt("Rename note:", currentTitle);
 
       if (nextTitle === null) {
@@ -838,6 +1036,11 @@
       }
     });
 
+    logoutButton.addEventListener("click", () => {
+      clearSessionState();
+      showAuthScreen();
+    });
+
     syncIntervalId = setInterval(() => {
       refreshNotesList().catch(() => {});
       syncActiveNote().catch(() => {});
@@ -853,8 +1056,9 @@
     });
 
     loadPreferences();
-    setEmptyState(true);
-    connect();
+    setAuthMode("login");
+    setActiveNote(null);
+    hydrateSession();
     </script>
   </body>
 </html>
