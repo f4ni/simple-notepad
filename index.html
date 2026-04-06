@@ -3,26 +3,129 @@
   <head>
     <title>Simple Notepad</title>
     <style>
+      :root {
+        --page-bg: #f3f0e8;
+        --panel-bg: rgba(255, 255, 255, 0.86);
+        --editor-bg: #fffdf8;
+        --text-color: #1f1a14;
+        --toolbar-text: #1f1a14;
+        --border-color: rgba(31, 26, 20, 0.12);
+        --control-bg: rgba(255, 255, 255, 0.9);
+        --control-text: #1f1a14;
+        --control-active-bg: #1f1a14;
+        --control-active-text: #fff;
+        --page-accent: rgba(212, 170, 98, 0.18);
+        --page-gradient-end: #ece7dc;
+        --toolbar-height: 68px;
+      }
+
       body {
         margin: 0;
-        font-family: Arial;
+        font-family: "Segoe UI", Arial, sans-serif;
+        background:
+          radial-gradient(circle at top left, var(--page-accent), transparent 28%),
+          linear-gradient(135deg, var(--page-bg), var(--page-gradient-end));
+        color: var(--text-color);
+      }
+
+      .toolbar {
+        position: sticky;
+        top: 0;
+        z-index: 2;
+        display: flex;
+        flex-wrap: wrap;
+        gap: 12px;
+        align-items: center;
+        padding: 14px 18px;
+        min-height: var(--toolbar-height);
+        box-sizing: border-box;
+        background: var(--panel-bg);
+        backdrop-filter: blur(12px);
+        border-bottom: 1px solid var(--border-color);
+      }
+
+      .toolbar label {
+        display: inline-flex;
+        align-items: center;
+        gap: 8px;
+        font-size: 14px;
+        color: var(--toolbar-text);
+      }
+
+      .toolbar select,
+      .toolbar input[type="color"],
+      .toolbar button {
+        border: 1px solid var(--border-color);
+        border-radius: 10px;
+        background: var(--control-bg);
+        color: var(--control-text);
+        padding: 8px 10px;
+        font-size: 14px;
+      }
+
+      .toolbar select {
+        appearance: none;
+        min-width: 120px;
+      }
+
+      .toolbar button {
+        min-width: 44px;
+        cursor: pointer;
+      }
+
+      .toolbar input[type="color"] {
+        width: 52px;
+        height: 40px;
+        padding: 4px;
+      }
+
+      .toolbar button.active {
+        background: var(--control-active-bg);
+        color: var(--control-active-text);
       }
 
       textarea {
         width: 100%;
-        height: 100vh;
+        height: calc(100vh - var(--toolbar-height));
         font-size: 18px;
         padding: 20px;
         box-sizing: border-box;
+        border: 0;
+        resize: none;
+        color: var(--text-color);
+        background: var(--editor-bg);
+        outline: none;
       }
     </style>
   </head>
 
   <body>
+    <div class="toolbar">
+      <label>
+        Theme
+        <select id="themeSelect">
+          <option value="sand">Sand</option>
+          <option value="mist">Mist</option>
+          <option value="forest">Forest</option>
+          <option value="midnight">Midnight</option>
+        </select>
+      </label>
+      <label>
+        Background
+        <input id="backgroundPicker" type="color" value="#fffdf8" />
+      </label>
+      <button id="boldToggle" type="button">B</button>
+      <button id="underlineToggle" type="button">U</button>
+    </div>
     <textarea id="editor" placeholder="Start typing..."></textarea>
 
     <script>
+    const STORAGE_KEY = "simple-notepad-preferences";
     const editor = document.getElementById("editor");
+    const themeSelect = document.getElementById("themeSelect");
+    const backgroundPicker = document.getElementById("backgroundPicker");
+    const boldToggle = document.getElementById("boldToggle");
+    const underlineToggle = document.getElementById("underlineToggle");
     const clientId = crypto.randomUUID();
     let ws;
     let passcode = "";
@@ -32,8 +135,151 @@
     let syncIntervalId = null;
     let sendTimeoutId = null;
     let pendingText = "";
+    let preferences = {
+    theme: "sand",
+    background: "#fffdf8",
+    bold: false,
+    underline: false,
+    };
 
     editor.disabled = true;
+
+    function savePreferences() {
+    localStorage.setItem(STORAGE_KEY, JSON.stringify(preferences));
+    }
+
+    function getReadableTextColor(backgroundColor) {
+    const hex = backgroundColor.replace("#", "");
+
+    if (hex.length !== 6) {
+        return "#1f1a14";
+    }
+
+    const red = parseInt(hex.slice(0, 2), 16);
+    const green = parseInt(hex.slice(2, 4), 16);
+    const blue = parseInt(hex.slice(4, 6), 16);
+    const brightness = (red * 299 + green * 587 + blue * 114) / 1000;
+
+    return brightness > 150 ? "#1b1b1b" : "#f7f7f7";
+    }
+
+    function getControlTextColor(backgroundColor) {
+    const hex = backgroundColor.replace("#", "");
+
+    if (hex.length !== 6) {
+        return "#1f1a14";
+    }
+
+    const red = parseInt(hex.slice(0, 2), 16);
+    const green = parseInt(hex.slice(2, 4), 16);
+    const blue = parseInt(hex.slice(4, 6), 16);
+    const brightness = (red * 299 + green * 587 + blue * 114) / 1000;
+
+    return brightness > 150 ? "#18222d" : "#f3f5fa";
+    }
+
+    function applyPreferences() {
+    const themes = {
+        sand: {
+        pageBg: "#f3f0e8",
+        panelBg: "rgba(255, 255, 255, 0.86)",
+        editorBg: preferences.background,
+        textColor: "#1f1a14",
+        borderColor: "rgba(31, 26, 20, 0.12)",
+        controlBg: "rgba(255, 255, 255, 0.9)",
+        controlText: "#1f1a14",
+        controlActiveBg: "#1f1a14",
+        controlActiveText: "#ffffff",
+        pageAccent: "rgba(212, 170, 98, 0.18)",
+        pageGradientEnd: "#ece7dc",
+        },
+        mist: {
+        pageBg: "#dce8f2",
+        panelBg: "rgba(237, 244, 249, 0.88)",
+        editorBg: preferences.background,
+        textColor: "#1d3142",
+        borderColor: "rgba(29, 49, 66, 0.16)",
+        controlBg: "rgba(226, 237, 246, 0.95)",
+        controlText: "#1d3142",
+        controlActiveBg: "#325c7a",
+        controlActiveText: "#ffffff",
+        pageAccent: "rgba(132, 176, 214, 0.28)",
+        pageGradientEnd: "#f4f8fb",
+        },
+        forest: {
+        pageBg: "#d9e6d5",
+        panelBg: "rgba(239, 246, 236, 0.88)",
+        editorBg: preferences.background,
+        textColor: "#203827",
+        borderColor: "rgba(32, 56, 39, 0.16)",
+        controlBg: "rgba(227, 239, 225, 0.94)",
+        controlText: "#203827",
+        controlActiveBg: "#355844",
+        controlActiveText: "#ffffff",
+        pageAccent: "rgba(107, 158, 118, 0.24)",
+        pageGradientEnd: "#edf5ea",
+        },
+        midnight: {
+        pageBg: "#1a1f2b",
+        panelBg: "rgba(34, 40, 56, 0.88)",
+        editorBg: preferences.background,
+        textColor: "#f3f5fa",
+        borderColor: "rgba(243, 245, 250, 0.16)",
+        controlBg: "rgba(54, 63, 87, 0.95)",
+        controlText: "#f3f5fa",
+        controlActiveBg: "#f3f5fa",
+        controlActiveText: "#1a1f2b",
+        pageAccent: "rgba(111, 132, 202, 0.24)",
+        pageGradientEnd: "#111522",
+        },
+    };
+
+    const selectedTheme = themes[preferences.theme] || themes.sand;
+    const editorTextColor = getReadableTextColor(preferences.background);
+    const toolbarTextColor = selectedTheme.textColor;
+    const controlTextColor = selectedTheme.controlText || getControlTextColor(selectedTheme.controlBg);
+
+    document.documentElement.style.setProperty("--page-bg", selectedTheme.pageBg);
+    document.documentElement.style.setProperty("--panel-bg", selectedTheme.panelBg);
+    document.documentElement.style.setProperty("--editor-bg", selectedTheme.editorBg);
+    document.documentElement.style.setProperty("--text-color", editorTextColor);
+    document.documentElement.style.setProperty("--toolbar-text", toolbarTextColor);
+    document.documentElement.style.setProperty("--border-color", selectedTheme.borderColor);
+    document.documentElement.style.setProperty("--control-bg", selectedTheme.controlBg);
+    document.documentElement.style.setProperty("--control-text", controlTextColor);
+    document.documentElement.style.setProperty("--control-active-bg", selectedTheme.controlActiveBg);
+    document.documentElement.style.setProperty("--control-active-text", selectedTheme.controlActiveText);
+    document.documentElement.style.setProperty("--page-accent", selectedTheme.pageAccent);
+    document.documentElement.style.setProperty("--page-gradient-end", selectedTheme.pageGradientEnd);
+
+    editor.style.fontWeight = preferences.bold ? "700" : "400";
+    editor.style.textDecoration = preferences.underline ? "underline" : "none";
+
+    themeSelect.value = preferences.theme;
+    backgroundPicker.value = preferences.background;
+    boldToggle.classList.toggle("active", preferences.bold);
+    underlineToggle.classList.toggle("active", preferences.underline);
+    }
+
+    function loadPreferences() {
+    const saved = localStorage.getItem(STORAGE_KEY);
+
+    if (!saved) {
+        applyPreferences();
+        return;
+    }
+
+    try {
+        const parsed = JSON.parse(saved);
+        preferences = {
+        ...preferences,
+        ...parsed,
+        };
+    } catch (_error) {
+    }
+
+    applyPreferences();
+    }
 
     function applyRemoteText(text) {
     const selectionStart = editor.selectionStart;
@@ -167,6 +413,30 @@
     queueSend();
     });
 
+    themeSelect.addEventListener("change", () => {
+    preferences.theme = themeSelect.value;
+    savePreferences();
+    applyPreferences();
+    });
+
+    backgroundPicker.addEventListener("input", () => {
+    preferences.background = backgroundPicker.value;
+    savePreferences();
+    applyPreferences();
+    });
+
+    boldToggle.addEventListener("click", () => {
+    preferences.bold = !preferences.bold;
+    savePreferences();
+    applyPreferences();
+    });
+
+    underlineToggle.addEventListener("click", () => {
+    preferences.underline = !preferences.underline;
+    savePreferences();
+    applyPreferences();
+    });
+
     syncIntervalId = setInterval(() => {
     syncFromServer().catch(() => {});
     }, 5000);
@@ -180,6 +450,7 @@
     }
     });
 
+    loadPreferences();
     connect();
     </script>
   </body>
