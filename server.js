@@ -34,7 +34,9 @@ app.get("/", (_req, res) => {
 });
 
 let currentText = "";
+let currentVersion = 0;
 let wss;
+let updateChain = Promise.resolve();
 
 function isValidPasscode(input) {
   if (typeof input !== "string") {
@@ -58,10 +60,22 @@ function broadcastCurrentText() {
         JSON.stringify({
           type: "update",
           text: currentText,
+          version: currentVersion,
         })
       );
     }
   });
+}
+
+function ensureAuthorized(req, res, next) {
+  const passcode = req.get("x-notepad-passcode");
+
+  if (!isValidPasscode(passcode)) {
+    res.status(401).json({ error: "Unauthorized" });
+    return;
+  }
+
+  next();
 }
 
 async function initializeStorage() {
@@ -71,6 +85,7 @@ async function initializeStorage() {
     CREATE TABLE IF NOT EXISTS shared_note (
       id INTEGER PRIMARY KEY CHECK (id = 1),
       content TEXT NOT NULL DEFAULT '',
+      version INTEGER NOT NULL DEFAULT 0,
       updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
     )
   `);
@@ -85,21 +100,39 @@ async function initializeStorage() {
   );
 
   const result = await pool.query(
-    "SELECT content FROM shared_note WHERE id = 1 LIMIT 1"
+    "SELECT content, version FROM shared_note WHERE id = 1 LIMIT 1"
   );
 
   currentText = result.rows[0]?.content || "";
+  currentVersion = result.rows[0]?.version || 0;
 }
 
 async function saveCurrentText(nextText) {
-  await pool.query(
+  const result = await pool.query(
     `
       UPDATE shared_note
-      SET content = $1, updated_at = NOW()
+      SET content = $1, version = version + 1, updated_at = NOW()
       WHERE id = 1
+      RETURNING version
     `,
     [nextText]
   );
+
+  currentVersion = result.rows[0]?.version || currentVersion;
+}
+
+function enqueueUpdate(nextText) {
+  updateChain = updateChain
+    .then(async () => {
+      currentText = nextText;
+      await saveCurrentText(currentText);
+      broadcastCurrentText();
+    })
+    .catch((error) => {
+      console.error("Failed to persist update:", error);
+    });
+
+  return updateChain;
 }
 
 function attachWebSocketServer(server) {
@@ -128,7 +161,13 @@ function attachWebSocketServer(server) {
 
           ws.isAuthenticated = true;
           ws.failedAuthAttempts = 0;
-          ws.send(JSON.stringify({ type: "init", text: currentText }));
+          ws.send(
+            JSON.stringify({
+              type: "init",
+              text: currentText,
+              version: currentVersion,
+            })
+          );
           return;
         }
 
@@ -138,9 +177,8 @@ function attachWebSocketServer(server) {
         }
 
         if (data.type === "update") {
-          currentText = typeof data.text === "string" ? data.text : "";
-          await saveCurrentText(currentText);
-          broadcastCurrentText();
+          const nextText = typeof data.text === "string" ? data.text : "";
+          await enqueueUpdate(nextText);
         }
       } catch (err) {
         console.error("Error:", err);
@@ -151,6 +189,13 @@ function attachWebSocketServer(server) {
 
 async function start() {
   await initializeStorage();
+
+  app.get("/api/note", ensureAuthorized, (_req, res) => {
+    res.json({
+      text: currentText,
+      version: currentVersion,
+    });
+  });
 
   const server = app.listen(PORT, () => {
     console.log("Running on port " + PORT);

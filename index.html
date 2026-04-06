@@ -23,21 +23,91 @@
 
     <script>
     const editor = document.getElementById("editor");
-    const protocol = window.location.protocol === "https:" ? "wss:" : "ws:";
-    const ws = new WebSocket(`${protocol}//${window.location.host}`);
-
-    let isLocalChange = false;
+    let ws;
+    let passcode = "";
     let isAuthenticated = false;
+    let latestVersion = 0;
+    let reconnectTimeoutId = null;
+    let syncIntervalId = null;
+    let sendTimeoutId = null;
+    let pendingText = "";
 
     editor.disabled = true;
 
-    ws.onopen = () => {
-    const passcode = prompt("Enter passcode:");
+    function applyRemoteText(text) {
+    const selectionStart = editor.selectionStart;
+    const selectionEnd = editor.selectionEnd;
+    const wasFocused = document.activeElement === editor;
 
+    editor.value = text;
+
+    if (wasFocused) {
+        const nextStart = Math.min(selectionStart, editor.value.length);
+        const nextEnd = Math.min(selectionEnd, editor.value.length);
+        editor.setSelectionRange(nextStart, nextEnd);
+    }
+    }
+
+    async function syncFromServer() {
     if (!passcode) {
+        return;
+    }
+
+    const response = await fetch("/api/note", {
+        headers: {
+        "x-notepad-passcode": passcode,
+        },
+    });
+
+    if (!response.ok) {
+        return;
+    }
+
+    const data = await response.json();
+
+    if (typeof data.version === "number" && data.version > latestVersion) {
+        latestVersion = data.version;
+        applyRemoteText(data.text || "");
+    }
+    }
+
+    function scheduleReconnect() {
+    clearTimeout(reconnectTimeoutId);
+    reconnectTimeoutId = setTimeout(connect, 1000);
+    }
+
+    function flushPendingText() {
+    if (!isAuthenticated || !ws || ws.readyState !== WebSocket.OPEN) {
+        return;
+    }
+
+    ws.send(
+        JSON.stringify({
+        type: "update",
+        text: pendingText,
+        })
+    );
+    }
+
+    function queueSend() {
+    pendingText = editor.value;
+    clearTimeout(sendTimeoutId);
+    sendTimeoutId = setTimeout(flushPendingText, 60);
+    }
+
+    function connect() {
+    const protocol = window.location.protocol === "https:" ? "wss:" : "ws:";
+    ws = new WebSocket(`${protocol}//${window.location.host}`);
+
+    ws.onopen = () => {
+    if (!passcode) {
+        passcode = prompt("Enter passcode:");
+
+        if (!passcode) {
         alert("A passcode is required.");
         ws.close();
         return;
+        }
     }
 
     ws.send(JSON.stringify({ type: "auth", pass: passcode }));
@@ -49,46 +119,62 @@
     if (data.type === "init") {
         isAuthenticated = true;
         editor.disabled = false;
+        latestVersion = typeof data.version === "number" ? data.version : 0;
         editor.value = data.text;
         editor.focus();
         return;
     }
 
     if (data.type === "update") {
-        if (!isLocalChange) {
-        editor.value = data.text;
+        if (typeof data.version === "number" && data.version <= latestVersion) {
+        return;
         }
+
+        latestVersion = data.version;
+        applyRemoteText(data.text || "");
         return;
     }
 
     if (data.type === "auth-error") {
         alert("Incorrect passcode.");
+        passcode = "";
         ws.close();
     }
     };
 
+    ws.onclose = () => {
+    editor.disabled = true;
+    isAuthenticated = false;
+    scheduleReconnect();
+    };
+
+    ws.onerror = () => {
+    ws.close();
+    };
+    }
+
     editor.addEventListener("input", () => {
-    if (!isAuthenticated || ws.readyState !== WebSocket.OPEN) {
+    if (!isAuthenticated) {
         return;
     }
 
-    isLocalChange = true;
-
-    ws.send(
-        JSON.stringify({
-        type: "update",
-        text: editor.value,
-        })
-    );
-
-    setTimeout(() => {
-        isLocalChange = false;
-    }, 100);
+    queueSend();
     });
 
-    ws.onclose = () => {
-    editor.disabled = true;
-    };
+    syncIntervalId = setInterval(() => {
+    syncFromServer().catch(() => {});
+    }, 5000);
+
+    window.addEventListener("beforeunload", () => {
+    clearInterval(syncIntervalId);
+    clearTimeout(reconnectTimeoutId);
+    clearTimeout(sendTimeoutId);
+    if (ws && ws.readyState === WebSocket.OPEN) {
+        ws.close();
+    }
+    });
+
+    connect();
     </script>
   </body>
 </html>
