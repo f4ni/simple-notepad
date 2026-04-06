@@ -198,18 +198,25 @@
         padding: 4px;
       }
 
-      textarea {
+      .editor {
         width: 100%;
         flex: 1;
         min-height: 0;
         border: 0;
-        resize: none;
         padding: 20px;
         font-size: 18px;
         line-height: 1.5;
         color: var(--editor-text);
         background: var(--editor-bg);
         outline: none;
+        overflow: auto;
+        white-space: pre-wrap;
+        word-break: break-word;
+      }
+
+      .editor:empty:before {
+        content: attr(data-placeholder);
+        color: rgba(127, 127, 127, 0.8);
       }
 
       .empty-state {
@@ -270,7 +277,7 @@
           <button id="underlineToggle" type="button">U</button>
         </div>
         <div class="editor-area">
-          <textarea id="editor" placeholder="Start typing..."></textarea>
+          <div id="editor" class="editor" contenteditable="true" data-placeholder="Start typing..."></div>
           <div id="emptyState" class="empty-state" hidden>Create a note from the sidebar to get started.</div>
         </div>
       </main>
@@ -305,14 +312,50 @@
     let preferences = {
       theme: "sand",
       background: "#fffdf8",
-      bold: false,
-      underline: false,
     };
 
-    editor.disabled = true;
+    editor.contentEditable = "false";
 
     function savePreferences() {
       localStorage.setItem(STORAGE_KEY, JSON.stringify(preferences));
+    }
+
+    function escapeHtml(value) {
+      return value
+        .replaceAll("&", "&amp;")
+        .replaceAll("<", "&lt;")
+        .replaceAll(">", "&gt;")
+        .replaceAll('"', "&quot;")
+        .replaceAll("'", "&#39;");
+    }
+
+    function looksLikeHtml(value) {
+      return /<\/?[a-z][\s\S]*>/i.test(value);
+    }
+
+    function normalizeStoredContent(value) {
+      if (!value) {
+        return "";
+      }
+
+      if (looksLikeHtml(value)) {
+        return value;
+      }
+
+      return escapeHtml(value).replace(/\n/g, "<br>");
+    }
+
+    function setEditorMarkup(value) {
+      editor.innerHTML = normalizeStoredContent(value);
+    }
+
+    function getEditorMarkup() {
+      return editor.innerHTML;
+    }
+
+    function updateFormattingButtons() {
+      boldToggle.classList.toggle("active", document.queryCommandState("bold"));
+      underlineToggle.classList.toggle("active", document.queryCommandState("underline"));
     }
 
     function getReadableTextColor(backgroundColor) {
@@ -416,13 +459,9 @@
       document.documentElement.style.setProperty("--page-accent", selectedTheme.pageAccent);
       document.documentElement.style.setProperty("--page-gradient-end", selectedTheme.pageGradientEnd);
 
-      editor.style.fontWeight = preferences.bold ? "700" : "400";
-      editor.style.textDecoration = preferences.underline ? "underline" : "none";
-
       themeSelect.value = preferences.theme;
       backgroundPicker.value = preferences.background;
-      boldToggle.classList.toggle("active", preferences.bold);
-      underlineToggle.classList.toggle("active", preferences.underline);
+      updateFormattingButtons();
     }
 
     function loadPreferences() {
@@ -479,7 +518,7 @@
       emptyState.style.display = isEmpty ? "flex" : "none";
       editor.hidden = isEmpty;
       editor.style.display = isEmpty ? "none" : "block";
-      editor.disabled = isEmpty || !isAuthenticated || !activeNoteId;
+      editor.contentEditable = isEmpty || !isAuthenticated || !activeNoteId ? "false" : "true";
       renameNoteButton.disabled = isEmpty || !activeNoteId;
     }
 
@@ -489,7 +528,7 @@
         activeNoteVersion = 0;
         activeNoteTitle.textContent = "No note selected";
         activeNoteMeta.textContent = "Create a note from the sidebar.";
-        editor.value = "";
+        setEditorMarkup("");
         setEmptyState(true);
         renderNotes();
         return;
@@ -499,10 +538,11 @@
       activeNoteVersion = note.version || 0;
       activeNoteTitle.textContent = note.title;
       activeNoteMeta.textContent = `Last updated ${formatUpdatedAt(note.updatedAt)}`;
-      editor.value = note.text || "";
+      setEditorMarkup(note.text || "");
       setEmptyState(false);
-      editor.disabled = !isAuthenticated;
+      editor.contentEditable = isAuthenticated ? "true" : "false";
       renderNotes();
+      updateFormattingButtons();
     }
 
     function upsertNoteSummary(note) {
@@ -587,7 +627,7 @@
     }
 
     function queueSend() {
-      pendingText = editor.value;
+      pendingText = getEditorMarkup();
       clearTimeout(sendTimeoutId);
       sendTimeoutId = setTimeout(flushPendingText, 60);
     }
@@ -615,7 +655,7 @@
 
         if (data.type === "init") {
           isAuthenticated = true;
-          editor.disabled = false;
+          editor.contentEditable = "true";
           notes = data.notes || [];
           renderNotes();
           setActiveNote(data.activeNote);
@@ -665,7 +705,8 @@
             if ((data.version || 0) > activeNoteVersion) {
               activeNoteVersion = data.version || 0;
               activeNoteMeta.textContent = `Last updated ${formatUpdatedAt(data.updatedAt)}`;
-              editor.value = data.text || "";
+              setEditorMarkup(data.text || "");
+              updateFormattingButtons();
             }
           }
 
@@ -681,7 +722,7 @@
       };
 
       ws.onclose = () => {
-        editor.disabled = true;
+        editor.contentEditable = "false";
         isAuthenticated = false;
         scheduleReconnect();
       };
@@ -697,7 +738,12 @@
       }
 
       queueSend();
+      updateFormattingButtons();
     });
+
+    editor.addEventListener("keyup", updateFormattingButtons);
+    editor.addEventListener("mouseup", updateFormattingButtons);
+    editor.addEventListener("focus", updateFormattingButtons);
 
     themeSelect.addEventListener("change", () => {
       preferences.theme = themeSelect.value;
@@ -712,15 +758,25 @@
     });
 
     boldToggle.addEventListener("click", () => {
-      preferences.bold = !preferences.bold;
-      savePreferences();
-      applyPreferences();
+      if (!activeNoteId) {
+        return;
+      }
+
+      editor.focus();
+      document.execCommand("bold");
+      updateFormattingButtons();
+      queueSend();
     });
 
     underlineToggle.addEventListener("click", () => {
-      preferences.underline = !preferences.underline;
-      savePreferences();
-      applyPreferences();
+      if (!activeNoteId) {
+        return;
+      }
+
+      editor.focus();
+      document.execCommand("underline");
+      updateFormattingButtons();
+      queueSend();
     });
 
     newNoteButton.addEventListener("click", async () => {
