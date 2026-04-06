@@ -23,6 +23,7 @@
 
     <script>
     const editor = document.getElementById("editor");
+    const clientId = crypto.randomUUID();
     let ws;
     let passcode = "";
     let isAuthenticated = false;
@@ -110,7 +111,7 @@
         }
     }
 
-    ws.send(JSON.stringify({ type: "auth", pass: passcode }));
+    ws.send(JSON.stringify({ type: "auth", pass: passcode, clientId }));
     };
 
     ws.onmessage = (event) => {
@@ -126,6 +127,11 @@
     }
 
     if (data.type === "update") {
+        if (data.sourceClientId === clientId) {
+        latestVersion = typeof data.version === "number" ? data.version : latestVersion;
+        return;
+        }
+
         if (typeof data.version === "number" && data.version <= latestVersion) {
         return;
         }

@@ -35,6 +35,7 @@ app.get("/", (_req, res) => {
 
 let currentText = "";
 let currentVersion = 0;
+let currentSourceClientId = null;
 let wss;
 let updateChain = Promise.resolve();
 
@@ -61,6 +62,7 @@ function broadcastCurrentText() {
           type: "update",
           text: currentText,
           version: currentVersion,
+          sourceClientId: currentSourceClientId,
         })
       );
     }
@@ -126,10 +128,11 @@ async function saveCurrentText(nextText) {
   currentVersion = result.rows[0]?.version || currentVersion;
 }
 
-function enqueueUpdate(nextText) {
+function enqueueUpdate(nextText, sourceClientId) {
   updateChain = updateChain
     .then(async () => {
       currentText = nextText;
+      currentSourceClientId = sourceClientId || null;
       await saveCurrentText(currentText);
       broadcastCurrentText();
     })
@@ -165,6 +168,7 @@ function attachWebSocketServer(server) {
           }
 
           ws.isAuthenticated = true;
+          ws.clientId = typeof data.clientId === "string" ? data.clientId : null;
           ws.failedAuthAttempts = 0;
           ws.send(
             JSON.stringify({
@@ -183,7 +187,7 @@ function attachWebSocketServer(server) {
 
         if (data.type === "update") {
           const nextText = typeof data.text === "string" ? data.text : "";
-          await enqueueUpdate(nextText);
+          await enqueueUpdate(nextText, ws.clientId);
         }
       } catch (err) {
         console.error("Error:", err);
