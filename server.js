@@ -90,6 +90,11 @@ async function initializeStorage() {
     )
   `);
 
+  await pool.query(`
+    ALTER TABLE shared_note
+    ADD COLUMN IF NOT EXISTS version INTEGER NOT NULL DEFAULT 0
+  `);
+
   await pool.query(
     `
       INSERT INTO shared_note (id, content)
