@@ -121,6 +121,12 @@
         min-width: 0;
       }
 
+      .editor-area {
+        display: flex;
+        flex: 1;
+        min-height: 0;
+      }
+
       .toolbar {
         display: flex;
         flex-wrap: wrap;
@@ -263,8 +269,10 @@
           <button id="boldToggle" type="button">B</button>
           <button id="underlineToggle" type="button">U</button>
         </div>
-        <textarea id="editor" placeholder="Start typing..."></textarea>
-        <div id="emptyState" class="empty-state" hidden>Create a note from the sidebar to get started.</div>
+        <div class="editor-area">
+          <textarea id="editor" placeholder="Start typing..."></textarea>
+          <div id="emptyState" class="empty-state" hidden>Create a note from the sidebar to get started.</div>
+        </div>
       </main>
     </div>
 
@@ -468,7 +476,9 @@
 
     function setEmptyState(isEmpty) {
       emptyState.hidden = !isEmpty;
+      emptyState.style.display = isEmpty ? "flex" : "none";
       editor.hidden = isEmpty;
+      editor.style.display = isEmpty ? "none" : "block";
       editor.disabled = isEmpty || !isAuthenticated || !activeNoteId;
       renameNoteButton.disabled = isEmpty || !activeNoteId;
     }
