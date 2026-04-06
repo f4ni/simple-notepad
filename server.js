@@ -27,15 +27,14 @@ const pool = new Pool({
   connectionString: DATABASE_URL,
 });
 
+app.use(express.json());
 app.use(express.static(path.join(__dirname)));
 
 app.get("/", (_req, res) => {
   res.sendFile(path.join(__dirname, "index.html"));
 });
 
-let currentText = "";
-let currentVersion = 0;
-let currentSourceClientId = null;
+let notesCache = new Map();
 let wss;
 let updateChain = Promise.resolve();
 
@@ -54,21 +53,6 @@ function isValidPasscode(input) {
   return crypto.timingSafeEqual(expected, actual);
 }
 
-function broadcastCurrentText() {
-  wss.clients.forEach((client) => {
-    if (client.readyState === WebSocket.OPEN && client.isAuthenticated) {
-      client.send(
-        JSON.stringify({
-          type: "update",
-          text: currentText,
-          version: currentVersion,
-          sourceClientId: currentSourceClientId,
-        })
-      );
-    }
-  });
-}
-
 function ensureAuthorized(req, res, next) {
   const passcode = req.get("x-notepad-passcode");
 
@@ -80,8 +64,55 @@ function ensureAuthorized(req, res, next) {
   next();
 }
 
+function makeNoteSummary(note) {
+  return {
+    id: note.id,
+    title: note.title,
+    version: note.version,
+    updatedAt: note.updated_at,
+  };
+}
+
+function getSortedNoteSummaries() {
+  return Array.from(notesCache.values())
+    .sort((left, right) => {
+      return new Date(right.updated_at).getTime() - new Date(left.updated_at).getTime();
+    })
+    .map(makeNoteSummary);
+}
+
+function broadcast(payload) {
+  wss.clients.forEach((client) => {
+    if (client.readyState === WebSocket.OPEN && client.isAuthenticated) {
+      client.send(JSON.stringify(payload));
+    }
+  });
+}
+
+function broadcastNotesList() {
+  broadcast({
+    type: "notes-list",
+    notes: getSortedNoteSummaries(),
+  });
+}
+
 async function initializeStorage() {
   const seedText = fs.existsSync(FILE) ? fs.readFileSync(FILE, "utf8") : "";
+
+  await pool.query(`
+    CREATE TABLE IF NOT EXISTS notes (
+      id UUID PRIMARY KEY,
+      title TEXT NOT NULL,
+      content TEXT NOT NULL DEFAULT '',
+      version INTEGER NOT NULL DEFAULT 0,
+      updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+    )
+  `);
+
+  await pool.query(`
+    ALTER TABLE notes
+    ADD COLUMN IF NOT EXISTS version INTEGER NOT NULL DEFAULT 0
+  `);
 
   await pool.query(`
     CREATE TABLE IF NOT EXISTS shared_note (
@@ -92,49 +123,92 @@ async function initializeStorage() {
     )
   `);
 
-  await pool.query(`
-    ALTER TABLE shared_note
-    ADD COLUMN IF NOT EXISTS version INTEGER NOT NULL DEFAULT 0
+  const noteCountResult = await pool.query("SELECT COUNT(*)::int AS count FROM notes");
+  const noteCount = noteCountResult.rows[0]?.count || 0;
+
+  if (noteCount === 0) {
+    const legacyResult = await pool.query(
+      "SELECT content FROM shared_note WHERE id = 1 LIMIT 1"
+    );
+    const legacyText = legacyResult.rows[0]?.content ?? seedText;
+
+    await createNote("My First Note", legacyText);
+  }
+
+  await refreshNotesCache();
+}
+
+async function refreshNotesCache() {
+  const result = await pool.query(`
+    SELECT id, title, content, version, updated_at
+    FROM notes
   `);
 
-  await pool.query(
-    `
-      INSERT INTO shared_note (id, content)
-      VALUES (1, $1)
-      ON CONFLICT (id) DO NOTHING
-    `,
-    [seedText]
-  );
-
-  const result = await pool.query(
-    "SELECT content, version FROM shared_note WHERE id = 1 LIMIT 1"
-  );
-
-  currentText = result.rows[0]?.content || "";
-  currentVersion = result.rows[0]?.version || 0;
+  notesCache = new Map(result.rows.map((row) => [row.id, row]));
 }
 
-async function saveCurrentText(nextText) {
+async function createNote(title, content = "") {
+  const noteId = crypto.randomUUID();
+  const trimmedTitle = typeof title === "string" ? title.trim() : "";
+  const safeTitle = trimmedTitle || "Untitled Note";
+
   const result = await pool.query(
     `
-      UPDATE shared_note
+      INSERT INTO notes (id, title, content)
+      VALUES ($1, $2, $3)
+      RETURNING id, title, content, version, updated_at
+    `,
+    [noteId, safeTitle, content]
+  );
+
+  const note = result.rows[0];
+  notesCache.set(note.id, note);
+  return note;
+}
+
+function getNoteById(noteId) {
+  return notesCache.get(noteId) || null;
+}
+
+async function saveNoteContent(noteId, nextText) {
+  const result = await pool.query(
+    `
+      UPDATE notes
       SET content = $1, version = version + 1, updated_at = NOW()
-      WHERE id = 1
-      RETURNING version
+      WHERE id = $2
+      RETURNING id, title, content, version, updated_at
     `,
-    [nextText]
+    [nextText, noteId]
   );
 
-  currentVersion = result.rows[0]?.version || currentVersion;
+  const note = result.rows[0] || null;
+
+  if (note) {
+    notesCache.set(note.id, note);
+  }
+
+  return note;
 }
 
-function enqueueUpdate(nextText, sourceClientId) {
+function enqueueNoteUpdate(noteId, nextText, sourceClientId) {
   updateChain = updateChain
     .then(async () => {
-      currentText = nextText;
-      currentSourceClientId = sourceClientId || null;
-      await saveCurrentText(currentText);
-      broadcastCurrentText();
+      const note = await saveNoteContent(noteId, nextText);
+
+      if (!note) {
+        return;
+      }
+
+      broadcast({
+        type: "note-update",
+        noteId: note.id,
+        text: note.content,
+        version: note.version,
+        updatedAt: note.updated_at,
+        sourceClientId: sourceClientId || null,
+      });
+
+      broadcastNotesList();
     })
     .catch((error) => {
       console.error("Failed to persist update:", error);
@@ -143,13 +217,62 @@ function enqueueUpdate(nextText, sourceClientId) {
   return updateChain;
 }
 
+function attachApiRoutes() {
+  app.get("/api/notes", ensureAuthorized, (_req, res) => {
+    res.json({ notes: getSortedNoteSummaries() });
+  });
+
+  app.get("/api/notes/:id", ensureAuthorized, (req, res) => {
+    const note = getNoteById(req.params.id);
+
+    if (!note) {
+      res.status(404).json({ error: "Note not found" });
+      return;
+    }
+
+    res.json({
+      note: {
+        id: note.id,
+        title: note.title,
+        text: note.content,
+        version: note.version,
+        updatedAt: note.updated_at,
+      },
+    });
+  });
+
+  app.post("/api/notes", ensureAuthorized, async (req, res) => {
+    try {
+      const title = typeof req.body?.title === "string" ? req.body.title : "";
+      const note = await createNote(title, "");
+      broadcast({
+        type: "note-created",
+        note: makeNoteSummary(note),
+      });
+      broadcastNotesList();
+      res.status(201).json({
+        note: {
+          id: note.id,
+          title: note.title,
+          text: note.content,
+          version: note.version,
+          updatedAt: note.updated_at,
+        },
+      });
+    } catch (error) {
+      console.error("Failed to create note:", error);
+      res.status(500).json({ error: "Could not create note" });
+    }
+  });
+}
+
 function attachWebSocketServer(server) {
   wss = new WebSocket.Server({ server });
 
   wss.on("connection", (ws) => {
-    console.log("Client connected");
     ws.isAuthenticated = false;
     ws.failedAuthAttempts = 0;
+    ws.clientId = null;
 
     ws.on("message", async (message) => {
       try {
@@ -170,11 +293,23 @@ function attachWebSocketServer(server) {
           ws.isAuthenticated = true;
           ws.clientId = typeof data.clientId === "string" ? data.clientId : null;
           ws.failedAuthAttempts = 0;
+
+          const notes = getSortedNoteSummaries();
+          const firstNote = notes[0] ? getNoteById(notes[0].id) : null;
+
           ws.send(
             JSON.stringify({
               type: "init",
-              text: currentText,
-              version: currentVersion,
+              notes,
+              activeNote: firstNote
+                ? {
+                    id: firstNote.id,
+                    title: firstNote.title,
+                    text: firstNote.content,
+                    version: firstNote.version,
+                    updatedAt: firstNote.updated_at,
+                  }
+                : null,
             })
           );
           return;
@@ -185,12 +320,18 @@ function attachWebSocketServer(server) {
           return;
         }
 
-        if (data.type === "update") {
+        if (data.type === "update-note") {
+          const noteId = typeof data.noteId === "string" ? data.noteId : "";
           const nextText = typeof data.text === "string" ? data.text : "";
-          await enqueueUpdate(nextText, ws.clientId);
+
+          if (!getNoteById(noteId)) {
+            return;
+          }
+
+          await enqueueNoteUpdate(noteId, nextText, ws.clientId);
         }
-      } catch (err) {
-        console.error("Error:", err);
+      } catch (error) {
+        console.error("Error:", error);
       }
     });
   });
@@ -198,13 +339,7 @@ function attachWebSocketServer(server) {
 
 async function start() {
   await initializeStorage();
-
-  app.get("/api/note", ensureAuthorized, (_req, res) => {
-    res.json({
-      text: currentText,
-      version: currentVersion,
-    });
-  });
+  attachApiRoutes();
 
   const server = app.listen(PORT, () => {
     console.log("Running on port " + PORT);
