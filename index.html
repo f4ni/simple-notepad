@@ -137,6 +137,12 @@
         min-width: 180px;
       }
 
+      .note-heading-row {
+        display: flex;
+        align-items: center;
+        gap: 10px;
+      }
+
       .note-heading h2 {
         margin: 0;
         font-size: 20px;
@@ -173,6 +179,11 @@
       .toolbar button.active {
         background: var(--control-active-bg);
         color: var(--control-active-text);
+      }
+
+      .rename-button {
+        min-width: 40px;
+        padding: 8px 10px;
       }
 
       .toolbar input[type="color"] {
@@ -230,7 +241,10 @@
       <main class="main-panel">
         <div class="toolbar">
           <div class="note-heading">
-            <h2 id="activeNoteTitle">Loading...</h2>
+            <div class="note-heading-row">
+              <h2 id="activeNoteTitle">Loading...</h2>
+              <button id="renameNoteButton" class="rename-button" type="button" title="Rename note">Edit</button>
+            </div>
             <p id="activeNoteMeta">Choose a note to start editing.</p>
           </div>
           <label>
@@ -261,6 +275,7 @@
     const newNoteButton = document.getElementById("newNoteButton");
     const activeNoteTitle = document.getElementById("activeNoteTitle");
     const activeNoteMeta = document.getElementById("activeNoteMeta");
+    const renameNoteButton = document.getElementById("renameNoteButton");
     const emptyState = document.getElementById("emptyState");
     const themeSelect = document.getElementById("themeSelect");
     const backgroundPicker = document.getElementById("backgroundPicker");
@@ -455,6 +470,7 @@
       emptyState.hidden = !isEmpty;
       editor.hidden = isEmpty;
       editor.disabled = isEmpty || !isAuthenticated || !activeNoteId;
+      renameNoteButton.disabled = isEmpty || !activeNoteId;
     }
 
     function setActiveNote(note) {
@@ -608,6 +624,18 @@
           return;
         }
 
+        if (data.type === "note-renamed") {
+          upsertNoteSummary(data.note);
+
+          if (data.note.id === activeNoteId) {
+            activeNoteTitle.textContent = data.note.title;
+            activeNoteMeta.textContent = `Last updated ${formatUpdatedAt(data.note.updatedAt)}`;
+          }
+
+          renderNotes();
+          return;
+        }
+
         if (data.type === "note-update") {
           upsertNoteSummary({
             id: data.noteId,
@@ -711,6 +739,36 @@
         setActiveNote(data.note);
       } catch (_error) {
         alert("Could not create the note.");
+      }
+    });
+
+    renameNoteButton.addEventListener("click", async () => {
+      if (!activeNoteId || !passcode) {
+        return;
+      }
+
+      const currentTitle = notes.find((note) => note.id === activeNoteId)?.title || activeNoteTitle.textContent;
+      const nextTitle = prompt("Rename note:", currentTitle);
+
+      if (nextTitle === null) {
+        return;
+      }
+
+      try {
+        const data = await fetchJson(`/api/notes/${activeNoteId}`, {
+          method: "PATCH",
+          body: JSON.stringify({ title: nextTitle }),
+        });
+
+        upsertNoteSummary({
+          id: data.note.id,
+          title: data.note.title,
+          version: data.note.version,
+          updatedAt: data.note.updatedAt,
+        });
+        setActiveNote(data.note);
+      } catch (_error) {
+        alert("Could not rename the note.");
       }
     });
 

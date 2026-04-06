@@ -190,6 +190,29 @@ async function saveNoteContent(noteId, nextText) {
   return note;
 }
 
+async function renameNote(noteId, nextTitle) {
+  const trimmedTitle = typeof nextTitle === "string" ? nextTitle.trim() : "";
+  const safeTitle = trimmedTitle || "Untitled Note";
+
+  const result = await pool.query(
+    `
+      UPDATE notes
+      SET title = $1, updated_at = NOW()
+      WHERE id = $2
+      RETURNING id, title, content, version, updated_at
+    `,
+    [safeTitle, noteId]
+  );
+
+  const note = result.rows[0] || null;
+
+  if (note) {
+    notesCache.set(note.id, note);
+  }
+
+  return note;
+}
+
 function enqueueNoteUpdate(noteId, nextText, sourceClientId) {
   updateChain = updateChain
     .then(async () => {
@@ -262,6 +285,37 @@ function attachApiRoutes() {
     } catch (error) {
       console.error("Failed to create note:", error);
       res.status(500).json({ error: "Could not create note" });
+    }
+  });
+
+  app.patch("/api/notes/:id", ensureAuthorized, async (req, res) => {
+    try {
+      const title = typeof req.body?.title === "string" ? req.body.title : "";
+      const note = await renameNote(req.params.id, title);
+
+      if (!note) {
+        res.status(404).json({ error: "Note not found" });
+        return;
+      }
+
+      broadcast({
+        type: "note-renamed",
+        note: makeNoteSummary(note),
+      });
+      broadcastNotesList();
+
+      res.json({
+        note: {
+          id: note.id,
+          title: note.title,
+          text: note.content,
+          version: note.version,
+          updatedAt: note.updated_at,
+        },
+      });
+    } catch (error) {
+      console.error("Failed to rename note:", error);
+      res.status(500).json({ error: "Could not rename note" });
     }
   });
 }
