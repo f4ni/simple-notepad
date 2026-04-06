@@ -1,77 +1,94 @@
 <!DOCTYPE html>
 <html>
-<head>
-  <meta name="viewport" content="width=device-width,initial-scale=1">
-  <title>Supabase Real-Time Notepad</title>
-  <style>
-    body { margin: 0; }
-    textarea {
-      width: 100%;
-      height: 100vh;
-      font-size: 18px;
-      padding: 20px;
-    }
-  </style>
-  <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
-</head>
-<body>
-<textarea id="editor"></textarea>
-
-<script>
-const SUPABASE_URL = "https://woybepucedjblfirvfsm.supabase.co";
-const SUPABASE_KEY = "sb_publishable_qS6QjpFtlk5Cy1suMyPkFw_-De_tVv5";
-
-const PASSCODE = prompt("Enter passcode:");
-
-const supabase = Supabase.createClient(SUPABASE_URL, SUPABASE_KEY);
-
-const editor = document.getElementById("editor");
-let isLocalChange = false;
-
-// Load initial content
-async function loadNote() {
-  const { data } = await supabase
-    .from('notes')
-    .select('content')
-    .eq('id', 1)
-    .single();
-
-  if (data) editor.value = data.content;
-  else {
-    // create row if not exists
-    await supabase.from('notes').insert({ id: 1, content: '' });
-  }
-}
-loadNote();
-
-// Subscribe to row changes (realtime)
-supabase
-  .channel('notes_channel')
-  .on(
-    'postgres_changes',
-    { event: '*', schema: 'public', table: 'notes', filter: 'id=eq.1' },
-    (payload) => {
-      if (!isLocalChange) {
-        editor.value = payload.new.content;
+  <head>
+    <title>Simple Notepad</title>
+    <style>
+      body {
+        margin: 0;
+        font-family: Arial;
       }
+
+      textarea {
+        width: 100%;
+        height: 100vh;
+        font-size: 18px;
+        padding: 20px;
+        box-sizing: border-box;
+      }
+    </style>
+  </head>
+
+  <body>
+    <textarea id="editor" placeholder="Start typing..."></textarea>
+
+    <script>
+    const editor = document.getElementById("editor");
+    const protocol = window.location.protocol === "https:" ? "wss:" : "ws:";
+    const ws = new WebSocket(`${protocol}//${window.location.host}`);
+
+    let isLocalChange = false;
+    let isAuthenticated = false;
+
+    editor.disabled = true;
+
+    ws.onopen = () => {
+    const passcode = prompt("Enter passcode:");
+
+    if (!passcode) {
+        alert("A passcode is required.");
+        ws.close();
+        return;
     }
-  )
-  .subscribe();
 
-// Update note on input
-editor.addEventListener('input', async () => {
-  if (PASSCODE !== '1234') return; // simple passcode protection
+    ws.send(JSON.stringify({ type: "auth", pass: passcode }));
+    };
 
-  isLocalChange = true;
-  const text = editor.value;
+    ws.onmessage = (event) => {
+    const data = JSON.parse(event.data);
 
-  await supabase
-    .from('notes')
-    .update({ content: text })
-    .eq('id', 1);
+    if (data.type === "init") {
+        isAuthenticated = true;
+        editor.disabled = false;
+        editor.value = data.text;
+        editor.focus();
+        return;
+    }
 
-  setTimeout(() => { isLocalChange = false; }, 50);
-});
-</script>
-</body>
+    if (data.type === "update") {
+        if (!isLocalChange) {
+        editor.value = data.text;
+        }
+        return;
+    }
+
+    if (data.type === "auth-error") {
+        alert("Incorrect passcode.");
+        ws.close();
+    }
+    };
+
+    editor.addEventListener("input", () => {
+    if (!isAuthenticated || ws.readyState !== WebSocket.OPEN) {
+        return;
+    }
+
+    isLocalChange = true;
+
+    ws.send(
+        JSON.stringify({
+        type: "update",
+        text: editor.value,
+        })
+    );
+
+    setTimeout(() => {
+        isLocalChange = false;
+    }, 100);
+    });
+
+    ws.onclose = () => {
+    editor.disabled = true;
+    };
+    </script>
+  </body>
 </html>
