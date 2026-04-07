@@ -167,10 +167,11 @@
       .modal-actions button {
         border: 1px solid var(--border-color);
         border-radius: 10px;
-        padding: 10px 14px;
+        padding: 8px 12px;
         background: var(--control-bg);
         color: var(--control-text);
         cursor: pointer;
+        font-size: 13px;
       }
 
       .modal-actions .danger-button {
@@ -209,8 +210,8 @@
       }
 
       .new-note-button {
-        padding: 10px 12px;
-        cursor: pointer;
+        padding: 7px 10px;
+        font-size: 13px;
       }
 
       .sidebar button {
@@ -218,8 +219,9 @@
         border-radius: 10px;
         background: var(--control-bg);
         color: var(--control-text);
-        padding: 10px 12px;
+        padding: 7px 10px;
         cursor: pointer;
+        font-size: 13px;
       }
 
       .user-chip {
@@ -315,8 +317,9 @@
         background: transparent;
         color: var(--sidebar-text);
         text-align: left;
-        padding: 10px 12px;
+        padding: 8px 10px;
         cursor: pointer;
+        font-size: 13px;
       }
 
       .note-menu button:hover {
@@ -592,7 +595,12 @@
     let preferences = {
       theme: "sand",
       background: "#fffdf8",
+      fontSize: 18,
     };
+
+    const MIN_EDITOR_FONT_SIZE = 14;
+    const MAX_EDITOR_FONT_SIZE = 32;
+    const EDITOR_FONT_STEP = 1;
 
     editor.contentEditable = "false";
 
@@ -748,10 +756,26 @@
       document.documentElement.style.setProperty("--control-active-text", selectedTheme.controlActiveText);
       document.documentElement.style.setProperty("--page-accent", selectedTheme.pageAccent);
       document.documentElement.style.setProperty("--page-gradient-end", selectedTheme.pageGradientEnd);
+      editor.style.fontSize = `${preferences.fontSize}px`;
 
       themeSelect.value = preferences.theme;
       backgroundPicker.value = preferences.background;
       updateFormattingButtons();
+    }
+
+    function adjustEditorFontSize(direction) {
+      const nextSize = Math.max(
+        MIN_EDITOR_FONT_SIZE,
+        Math.min(MAX_EDITOR_FONT_SIZE, preferences.fontSize + direction * EDITOR_FONT_STEP),
+      );
+
+      if (nextSize === preferences.fontSize) {
+        return;
+      }
+
+      preferences.fontSize = nextSize;
+      savePreferences();
+      applyPreferences();
     }
 
     function loadPreferences() {
@@ -766,6 +790,10 @@
         } catch (_error) {
         }
       }
+
+      preferences.fontSize = Number.isFinite(Number(preferences.fontSize))
+        ? Math.max(MIN_EDITOR_FONT_SIZE, Math.min(MAX_EDITOR_FONT_SIZE, Number(preferences.fontSize)))
+        : 18;
 
       applyPreferences();
     }
@@ -1407,6 +1435,15 @@
       queueSend();
       updateFormattingButtons();
     });
+
+    editor.addEventListener("wheel", (event) => {
+      if (!event.ctrlKey) {
+        return;
+      }
+
+      event.preventDefault();
+      adjustEditorFontSize(event.deltaY < 0 ? 1 : -1);
+    }, { passive: false });
 
     themeSelect.addEventListener("change", () => {
       preferences.theme = themeSelect.value;
