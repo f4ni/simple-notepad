@@ -159,6 +159,14 @@
         font-size: 14px;
       }
 
+      .sidebar-footer {
+        display: flex;
+        flex-direction: column;
+        gap: 10px;
+        margin-top: auto;
+        padding-top: 8px;
+      }
+
       .note-list {
         display: flex;
         flex-direction: column;
@@ -175,6 +183,10 @@
         background: transparent;
         color: var(--sidebar-text);
         cursor: pointer;
+        display: flex;
+        align-items: flex-start;
+        justify-content: space-between;
+        gap: 10px;
       }
 
       .note-item.active {
@@ -182,16 +194,62 @@
         border-color: var(--border-color);
       }
 
+      .note-item-content {
+        flex: 1;
+        min-width: 0;
+      }
+
       .note-item-title {
         display: block;
         font-weight: 700;
         margin-bottom: 4px;
+        word-break: break-word;
       }
 
       .note-item-meta {
         display: block;
         font-size: 12px;
         opacity: 0.7;
+      }
+
+      .note-menu-wrap {
+        position: relative;
+      }
+
+      .note-menu-button {
+        border: 0;
+        background: transparent;
+        color: var(--sidebar-text);
+        cursor: pointer;
+        padding: 2px 6px;
+        border-radius: 8px;
+      }
+
+      .note-menu {
+        position: absolute;
+        right: 0;
+        top: calc(100% + 6px);
+        min-width: 120px;
+        background: var(--panel-bg);
+        border: 1px solid var(--border-color);
+        border-radius: 12px;
+        box-shadow: 0 12px 30px rgba(0, 0, 0, 0.12);
+        overflow: hidden;
+        z-index: 5;
+      }
+
+      .note-menu button {
+        width: 100%;
+        border: 0;
+        background: transparent;
+        color: var(--sidebar-text);
+        text-align: left;
+        padding: 10px 12px;
+        cursor: pointer;
+      }
+
+      .note-menu button:hover {
+        background: var(--sidebar-active-bg);
       }
 
       .main-panel {
@@ -267,10 +325,6 @@
         color: var(--control-active-text);
       }
 
-      .rename-button,
-      .delete-button,
-      .list-button,
-      .ordered-list-button,
       .logout-button {
         min-width: 40px;
         padding: 8px 10px;
@@ -366,8 +420,11 @@
           <h1 class="sidebar-title">Notes</h1>
           <button id="newNoteButton" class="new-note-button" type="button">New</button>
         </div>
-        <div id="userChip" class="user-chip"></div>
         <div id="noteList" class="note-list"></div>
+        <div class="sidebar-footer">
+          <div id="userChip" class="user-chip"></div>
+          <button id="logoutButton" class="logout-button" type="button">Log Out</button>
+        </div>
       </aside>
 
       <main class="main-panel">
@@ -375,11 +432,15 @@
           <div class="note-heading">
             <div class="note-heading-row">
               <h2 id="activeNoteTitle">Loading...</h2>
-              <button id="renameNoteButton" class="rename-button" type="button" title="Rename note">Edit</button>
-              <button id="deleteNoteButton" class="delete-button" type="button" title="Delete note">Delete</button>
             </div>
             <p id="activeNoteMeta">Choose a note to start editing.</p>
           </div>
+          <button id="boldToggle" type="button">B</button>
+          <button id="underlineToggle" type="button">U</button>
+          <label>
+            Background
+            <input id="backgroundPicker" type="color" value="#fffdf8" />
+          </label>
           <label>
             Theme
             <select id="themeSelect">
@@ -389,15 +450,6 @@
               <option value="midnight">Midnight</option>
             </select>
           </label>
-          <label>
-            Background
-            <input id="backgroundPicker" type="color" value="#fffdf8" />
-          </label>
-          <button id="boldToggle" type="button">B</button>
-          <button id="underlineToggle" type="button">U</button>
-          <button id="bulletListToggle" class="list-button" type="button">• List</button>
-          <button id="numberedListToggle" class="ordered-list-button" type="button">1. List</button>
-          <button id="logoutButton" class="logout-button" type="button">Log Out</button>
         </div>
         <div class="editor-area">
           <div id="editor" class="editor" contenteditable="true" data-placeholder="Start typing..."></div>
@@ -426,15 +478,11 @@
     const newNoteButton = document.getElementById("newNoteButton");
     const activeNoteTitle = document.getElementById("activeNoteTitle");
     const activeNoteMeta = document.getElementById("activeNoteMeta");
-    const renameNoteButton = document.getElementById("renameNoteButton");
-    const deleteNoteButton = document.getElementById("deleteNoteButton");
     const emptyState = document.getElementById("emptyState");
     const themeSelect = document.getElementById("themeSelect");
     const backgroundPicker = document.getElementById("backgroundPicker");
     const boldToggle = document.getElementById("boldToggle");
     const underlineToggle = document.getElementById("underlineToggle");
-    const bulletListToggle = document.getElementById("bulletListToggle");
-    const numberedListToggle = document.getElementById("numberedListToggle");
     const logoutButton = document.getElementById("logoutButton");
     const userChip = document.getElementById("userChip");
     const clientId = crypto.randomUUID();
@@ -508,8 +556,6 @@
     function updateFormattingButtons() {
       boldToggle.classList.toggle("active", document.queryCommandState("bold"));
       underlineToggle.classList.toggle("active", document.queryCommandState("underline"));
-      bulletListToggle.classList.toggle("active", document.queryCommandState("insertUnorderedList"));
-      numberedListToggle.classList.toggle("active", document.queryCommandState("insertOrderedList"));
     }
 
     function getReadableTextColor(backgroundColor) {
@@ -683,12 +729,47 @@
         }
 
         button.innerHTML = `
-          <span class="note-item-title">${note.title}</span>
-          <span class="note-item-meta">${formatUpdatedAt(note.updatedAt)}</span>
+          <div class="note-item-content">
+            <span class="note-item-title">${note.title}</span>
+            <span class="note-item-meta">${formatUpdatedAt(note.updatedAt)}</span>
+          </div>
+          <div class="note-menu-wrap">
+            <button class="note-menu-button" type="button" aria-label="Note actions">...</button>
+            <div class="note-menu" hidden>
+              <button type="button" data-action="rename">Rename</button>
+              <button type="button" data-action="delete">Delete</button>
+            </div>
+          </div>
         `;
 
         button.addEventListener("click", () => {
           openNote(note.id);
+        });
+
+        const menuButton = button.querySelector(".note-menu-button");
+        const menu = button.querySelector(".note-menu");
+        const renameButton = menu.querySelector('[data-action="rename"]');
+        const deleteButton = menu.querySelector('[data-action="delete"]');
+
+        menuButton.addEventListener("click", (event) => {
+          event.stopPropagation();
+          const shouldOpen = menu.hidden;
+          document.querySelectorAll(".note-menu").forEach((entry) => {
+            entry.hidden = true;
+          });
+          menu.hidden = !shouldOpen;
+        });
+
+        renameButton.addEventListener("click", async (event) => {
+          event.stopPropagation();
+          menu.hidden = true;
+          await renameNoteById(note.id);
+        });
+
+        deleteButton.addEventListener("click", async (event) => {
+          event.stopPropagation();
+          menu.hidden = true;
+          await deleteNoteById(note.id);
         });
 
         noteList.appendChild(button);
@@ -700,8 +781,6 @@
       editor.hidden = isEmpty;
       editor.contentEditable =
         isEmpty || !sessionToken || !activeNoteId ? "false" : "true";
-      renameNoteButton.disabled = isEmpty || !activeNoteId;
-      deleteNoteButton.disabled = isEmpty || !activeNoteId;
     }
 
     function setActiveNote(note) {
@@ -878,6 +957,71 @@
     async function openNote(noteId) {
       const data = await fetchJson(`/api/notes/${noteId}`);
       setActiveNote(data.note);
+    }
+
+    async function renameNoteById(noteId) {
+      const currentTitle =
+        notes.find((note) => note.id === noteId)?.title || "Untitled Note";
+      const nextTitle = prompt("Rename note:", currentTitle);
+
+      if (nextTitle === null) {
+        return;
+      }
+
+      try {
+        const data = await fetchJson(`/api/notes/${noteId}`, {
+          method: "PATCH",
+          body: JSON.stringify({ title: nextTitle }),
+        });
+
+        upsertNoteSummary({
+          id: data.note.id,
+          title: data.note.title,
+          version: data.note.version,
+          updatedAt: data.note.updatedAt,
+        });
+
+        if (activeNoteId === noteId) {
+          setActiveNote(data.note);
+        } else {
+          renderNotes();
+        }
+      } catch (_error) {
+        alert("Could not rename the note.");
+      }
+    }
+
+    async function deleteNoteById(noteId) {
+      const noteTitle =
+        notes.find((note) => note.id === noteId)?.title || "this note";
+      const confirmed = window.confirm(`Delete "${noteTitle}"?`);
+
+      if (!confirmed) {
+        return;
+      }
+
+      try {
+        await fetchJson(`/api/notes/${noteId}`, {
+          method: "DELETE",
+        });
+
+        removeNoteSummary(noteId);
+
+        if (activeNoteId === noteId) {
+          const nextNote = notes[0] || null;
+
+          if (nextNote) {
+            await openNote(nextNote.id);
+          } else {
+            setActiveNote(null);
+            renderNotes();
+          }
+        } else {
+          renderNotes();
+        }
+      } catch (_error) {
+        alert("Could not delete the note.");
+      }
     }
 
     async function refreshNotesList() {
@@ -1128,28 +1272,6 @@
       queueSend();
     });
 
-    bulletListToggle.addEventListener("click", () => {
-      if (!activeNoteId) {
-        return;
-      }
-
-      editor.focus();
-      document.execCommand("insertUnorderedList");
-      updateFormattingButtons();
-      queueSend();
-    });
-
-    numberedListToggle.addEventListener("click", () => {
-      if (!activeNoteId) {
-        return;
-      }
-
-      editor.focus();
-      document.execCommand("insertOrderedList");
-      updateFormattingButtons();
-      queueSend();
-    });
-
     newNoteButton.addEventListener("click", async () => {
       const title = prompt("Name your new note:");
 
@@ -1175,73 +1297,17 @@
       }
     });
 
-    renameNoteButton.addEventListener("click", async () => {
-      if (!activeNoteId) {
-        return;
-      }
-
-      const currentTitle =
-        notes.find((note) => note.id === activeNoteId)?.title ||
-        activeNoteTitle.textContent;
-      const nextTitle = prompt("Rename note:", currentTitle);
-
-      if (nextTitle === null) {
-        return;
-      }
-
-      try {
-        const data = await fetchJson(`/api/notes/${activeNoteId}`, {
-          method: "PATCH",
-          body: JSON.stringify({ title: nextTitle }),
-        });
-
-        upsertNoteSummary({
-          id: data.note.id,
-          title: data.note.title,
-          version: data.note.version,
-          updatedAt: data.note.updatedAt,
-        });
-        setActiveNote(data.note);
-      } catch (_error) {
-        alert("Could not rename the note.");
-      }
-    });
-
-    deleteNoteButton.addEventListener("click", async () => {
-      if (!activeNoteId) {
-        return;
-      }
-
-      const confirmed = window.confirm(`Delete "${activeNoteTitle.textContent}"?`);
-
-      if (!confirmed) {
-        return;
-      }
-
-      const deletingId = activeNoteId;
-
-      try {
-        await fetchJson(`/api/notes/${deletingId}`, {
-          method: "DELETE",
-        });
-
-        removeNoteSummary(deletingId);
-        const nextNote = notes[0] || null;
-
-        if (nextNote) {
-          await openNote(nextNote.id);
-        } else {
-          setActiveNote(null);
-          renderNotes();
-        }
-      } catch (_error) {
-        alert("Could not delete the note.");
-      }
-    });
-
     logoutButton.addEventListener("click", () => {
       clearSessionState();
       showAuthScreen();
+    });
+
+    document.addEventListener("click", (event) => {
+      if (!event.target.closest(".note-menu-wrap")) {
+        document.querySelectorAll(".note-menu").forEach((entry) => {
+          entry.hidden = true;
+        });
+      }
     });
 
     syncIntervalId = setInterval(() => {
