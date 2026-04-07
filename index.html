@@ -2,6 +2,17 @@
 <html>
   <head>
     <title>Simple Notepad</title>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <meta name="theme-color" content="#1f1a14" />
+    <meta name="mobile-web-app-capable" content="yes" />
+    <meta name="apple-mobile-web-app-capable" content="yes" />
+    <meta name="apple-mobile-web-app-status-bar-style" content="default" />
+    <meta name="apple-mobile-web-app-title" content="Simple Notepad" />
+    <meta name="description" content="A private multi-note app with sync, formatting, and installable app support." />
+    <link rel="manifest" href="/manifest.webmanifest" />
+    <link rel="icon" href="/icons/icon.svg" type="image/svg+xml" />
+    <link rel="apple-touch-icon" href="/icons/icon-192.svg" />
     <style>
       :root {
         --page-bg: #f3f0e8;
@@ -257,6 +268,9 @@
       }
 
       .rename-button,
+      .delete-button,
+      .list-button,
+      .ordered-list-button,
       .logout-button {
         min-width: 40px;
         padding: 8px 10px;
@@ -282,6 +296,22 @@
         overflow: auto;
         white-space: pre-wrap;
         word-break: break-word;
+      }
+
+      .editor *,
+      .editor font {
+        font-size: inherit !important;
+        line-height: inherit !important;
+      }
+
+      .editor ul,
+      .editor ol {
+        margin: 0 0 0 24px;
+        padding: 0;
+      }
+
+      .editor li {
+        margin: 4px 0;
       }
 
       .editor:empty:before {
@@ -346,6 +376,7 @@
             <div class="note-heading-row">
               <h2 id="activeNoteTitle">Loading...</h2>
               <button id="renameNoteButton" class="rename-button" type="button" title="Rename note">Edit</button>
+              <button id="deleteNoteButton" class="delete-button" type="button" title="Delete note">Delete</button>
             </div>
             <p id="activeNoteMeta">Choose a note to start editing.</p>
           </div>
@@ -364,6 +395,8 @@
           </label>
           <button id="boldToggle" type="button">B</button>
           <button id="underlineToggle" type="button">U</button>
+          <button id="bulletListToggle" class="list-button" type="button">• List</button>
+          <button id="numberedListToggle" class="ordered-list-button" type="button">1. List</button>
           <button id="logoutButton" class="logout-button" type="button">Log Out</button>
         </div>
         <div class="editor-area">
@@ -394,11 +427,14 @@
     const activeNoteTitle = document.getElementById("activeNoteTitle");
     const activeNoteMeta = document.getElementById("activeNoteMeta");
     const renameNoteButton = document.getElementById("renameNoteButton");
+    const deleteNoteButton = document.getElementById("deleteNoteButton");
     const emptyState = document.getElementById("emptyState");
     const themeSelect = document.getElementById("themeSelect");
     const backgroundPicker = document.getElementById("backgroundPicker");
     const boldToggle = document.getElementById("boldToggle");
     const underlineToggle = document.getElementById("underlineToggle");
+    const bulletListToggle = document.getElementById("bulletListToggle");
+    const numberedListToggle = document.getElementById("numberedListToggle");
     const logoutButton = document.getElementById("logoutButton");
     const userChip = document.getElementById("userChip");
     const clientId = crypto.randomUUID();
@@ -472,6 +508,8 @@
     function updateFormattingButtons() {
       boldToggle.classList.toggle("active", document.queryCommandState("bold"));
       underlineToggle.classList.toggle("active", document.queryCommandState("underline"));
+      bulletListToggle.classList.toggle("active", document.queryCommandState("insertUnorderedList"));
+      numberedListToggle.classList.toggle("active", document.queryCommandState("insertOrderedList"));
     }
 
     function getReadableTextColor(backgroundColor) {
@@ -663,6 +701,7 @@
       editor.contentEditable =
         isEmpty || !sessionToken || !activeNoteId ? "false" : "true";
       renameNoteButton.disabled = isEmpty || !activeNoteId;
+      deleteNoteButton.disabled = isEmpty || !activeNoteId;
     }
 
     function setActiveNote(note) {
@@ -702,6 +741,10 @@
       });
     }
 
+    function removeNoteSummary(noteId) {
+      notes = notes.filter((note) => note.id !== noteId);
+    }
+
     function clearSessionState() {
       currentUser = null;
       saveSession("");
@@ -710,6 +753,84 @@
       activeNoteVersion = 0;
       userChip.textContent = "";
       setActiveNote(null);
+    }
+
+    function sanitizeNode(node) {
+      if (node.nodeType === Node.TEXT_NODE) {
+        return document.createTextNode(node.textContent || "");
+      }
+
+      if (node.nodeType !== Node.ELEMENT_NODE) {
+        return document.createDocumentFragment();
+      }
+
+      const tag = node.tagName.toLowerCase();
+      const allowedTags = new Set([
+        "b",
+        "strong",
+        "u",
+        "br",
+        "div",
+        "p",
+        "ul",
+        "ol",
+        "li",
+      ]);
+
+      if (!allowedTags.has(tag)) {
+        const fragment = document.createDocumentFragment();
+        Array.from(node.childNodes).forEach((child) => {
+          fragment.appendChild(sanitizeNode(child));
+        });
+        return fragment;
+      }
+
+      const clean = document.createElement(tag);
+      Array.from(node.childNodes).forEach((child) => {
+        clean.appendChild(sanitizeNode(child));
+      });
+      return clean;
+    }
+
+    function sanitizeHtml(html) {
+      const template = document.createElement("template");
+      template.innerHTML = html;
+      const fragment = document.createDocumentFragment();
+
+      Array.from(template.content.childNodes).forEach((child) => {
+        fragment.appendChild(sanitizeNode(child));
+      });
+
+      const wrapper = document.createElement("div");
+      wrapper.appendChild(fragment);
+      return wrapper.innerHTML;
+    }
+
+    function insertHtmlAtCursor(html) {
+      editor.focus();
+      const selection = window.getSelection();
+
+      if (!selection || selection.rangeCount === 0) {
+        editor.insertAdjacentHTML("beforeend", html);
+        return;
+      }
+
+      const range = selection.getRangeAt(0);
+      range.deleteContents();
+
+      const template = document.createElement("template");
+      template.innerHTML = html;
+      const fragment = template.content;
+      const lastNode = fragment.lastChild;
+
+      range.insertNode(fragment);
+
+      if (lastNode) {
+        range.setStartAfter(lastNode);
+        range.collapse(true);
+        selection.removeAllRanges();
+        selection.addRange(range);
+      }
     }
 
     async function fetchJson(url, options = {}) {
@@ -858,6 +979,23 @@
           return;
         }
 
+        if (data.type === "note-deleted") {
+          removeNoteSummary(data.note.id);
+
+          if (data.note.id === activeNoteId) {
+            const nextNote = notes[0] || null;
+            if (nextNote) {
+              openNote(nextNote.id);
+            } else {
+              setActiveNote(null);
+            }
+          } else {
+            renderNotes();
+          }
+
+          return;
+        }
+
         if (data.type === "note-update") {
           upsertNoteSummary({
             id: data.noteId,
@@ -944,6 +1082,17 @@
     editor.addEventListener("keyup", updateFormattingButtons);
     editor.addEventListener("mouseup", updateFormattingButtons);
     editor.addEventListener("focus", updateFormattingButtons);
+    editor.addEventListener("paste", (event) => {
+      event.preventDefault();
+
+      const html = event.clipboardData?.getData("text/html");
+      const text = event.clipboardData?.getData("text/plain") || "";
+      const safeHtml = html ? sanitizeHtml(html) : escapeHtml(text).replace(/\n/g, "<br>");
+
+      insertHtmlAtCursor(safeHtml);
+      queueSend();
+      updateFormattingButtons();
+    });
 
     themeSelect.addEventListener("change", () => {
       preferences.theme = themeSelect.value;
@@ -975,6 +1124,28 @@
 
       editor.focus();
       document.execCommand("underline");
+      updateFormattingButtons();
+      queueSend();
+    });
+
+    bulletListToggle.addEventListener("click", () => {
+      if (!activeNoteId) {
+        return;
+      }
+
+      editor.focus();
+      document.execCommand("insertUnorderedList");
+      updateFormattingButtons();
+      queueSend();
+    });
+
+    numberedListToggle.addEventListener("click", () => {
+      if (!activeNoteId) {
+        return;
+      }
+
+      editor.focus();
+      document.execCommand("insertOrderedList");
       updateFormattingButtons();
       queueSend();
     });
@@ -1036,6 +1207,38 @@
       }
     });
 
+    deleteNoteButton.addEventListener("click", async () => {
+      if (!activeNoteId) {
+        return;
+      }
+
+      const confirmed = window.confirm(`Delete "${activeNoteTitle.textContent}"?`);
+
+      if (!confirmed) {
+        return;
+      }
+
+      const deletingId = activeNoteId;
+
+      try {
+        await fetchJson(`/api/notes/${deletingId}`, {
+          method: "DELETE",
+        });
+
+        removeNoteSummary(deletingId);
+        const nextNote = notes[0] || null;
+
+        if (nextNote) {
+          await openNote(nextNote.id);
+        } else {
+          setActiveNote(null);
+          renderNotes();
+        }
+      } catch (_error) {
+        alert("Could not delete the note.");
+      }
+    });
+
     logoutButton.addEventListener("click", () => {
       clearSessionState();
       showAuthScreen();
@@ -1059,6 +1262,12 @@
     setAuthMode("login");
     setActiveNote(null);
     hydrateSession();
+
+    if ("serviceWorker" in navigator) {
+      window.addEventListener("load", () => {
+        navigator.serviceWorker.register("/service-worker.js").catch(() => {});
+      });
+    }
     </script>
   </body>
 </html>

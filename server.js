@@ -403,6 +403,25 @@ async function renameNote(noteId, ownerId, nextTitle) {
   return note;
 }
 
+async function deleteNote(noteId, ownerId) {
+  const result = await pool.query(
+    `
+      DELETE FROM notes
+      WHERE id = $1 AND owner_id = $2
+      RETURNING id, owner_id, title, content, version, updated_at
+    `,
+    [noteId, ownerId]
+  );
+
+  const note = result.rows[0] || null;
+
+  if (note) {
+    notesCache.delete(note.id);
+  }
+
+  return note;
+}
+
 function enqueueNoteUpdate(noteId, ownerId, nextText, sourceClientId) {
   updateChain = updateChain
     .then(async () => {
@@ -578,6 +597,31 @@ function attachNoteRoutes() {
     } catch (error) {
       console.error("Failed to rename note:", error);
       res.status(500).json({ error: "Could not rename note" });
+    }
+  });
+
+  app.delete("/api/notes/:id", ensureAuthorized, async (req, res) => {
+    try {
+      const note = await deleteNote(req.params.id, req.user.id);
+
+      if (!note) {
+        res.status(404).json({ error: "Note not found" });
+        return;
+      }
+
+      broadcastToUser(req.user.id, {
+        type: "note-deleted",
+        note: makeNoteSummary(note),
+      });
+      broadcastNotesList(req.user.id);
+
+      res.json({
+        deleted: true,
+        noteId: note.id,
+      });
+    } catch (error) {
+      console.error("Failed to delete note:", error);
+      res.status(500).json({ error: "Could not delete note" });
     }
   });
 }
