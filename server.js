@@ -331,6 +331,28 @@ async function createUser(username, password) {
   return user;
 }
 
+async function updateUserPassword(userId, nextPassword) {
+  const passwordHash = hashPassword(nextPassword);
+
+  const result = await pool.query(
+    `
+      UPDATE users
+      SET password_hash = $1
+      WHERE id = $2
+      RETURNING id, username, password_hash, created_at
+    `,
+    [passwordHash, userId]
+  );
+
+  const user = result.rows[0] || null;
+
+  if (user) {
+    usersCache.set(user.id, user);
+  }
+
+  return user;
+}
+
 async function createNote(ownerId, title, content = "") {
   const noteId = crypto.randomUUID();
   const trimmedTitle = typeof title === "string" ? title.trim() : "";
@@ -516,6 +538,45 @@ function attachAuthRoutes() {
         username: req.user.username,
       },
     });
+  });
+
+  app.post("/api/auth/change-password", ensureAuthorized, async (req, res) => {
+    try {
+      const currentPassword =
+        typeof req.body?.currentPassword === "string" ? req.body.currentPassword : "";
+      const newPassword =
+        typeof req.body?.newPassword === "string" ? req.body.newPassword : "";
+
+      if (!verifyPassword(currentPassword, req.user.password_hash)) {
+        res.status(401).json({ error: "Current password is incorrect." });
+        return;
+      }
+
+      if (newPassword.length < 6) {
+        res.status(400).json({ error: "New password must be at least 6 characters." });
+        return;
+      }
+
+      if (verifyPassword(newPassword, req.user.password_hash)) {
+        res.status(400).json({ error: "New password must be different from the current password." });
+        return;
+      }
+
+      await updateUserPassword(req.user.id, newPassword);
+      const refreshedUser = usersCache.get(req.user.id);
+      const token = createSessionToken(refreshedUser);
+
+      res.json({
+        token,
+        user: {
+          id: refreshedUser.id,
+          username: refreshedUser.username,
+        },
+      });
+    } catch (error) {
+      console.error("Failed to change password:", error);
+      res.status(500).json({ error: "Could not change password." });
+    }
   });
 }
 

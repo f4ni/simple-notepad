@@ -39,6 +39,8 @@
       body {
         margin: 0;
         min-height: 100vh;
+        height: 100vh;
+        overflow: hidden;
         font-family: "Segoe UI", Arial, sans-serif;
         background:
           radial-gradient(circle at top left, var(--page-accent), transparent 28%),
@@ -158,6 +160,35 @@
         margin-bottom: 14px;
       }
 
+      .settings-form {
+        display: flex;
+        flex-direction: column;
+        gap: 12px;
+      }
+
+      .settings-form label {
+        display: flex;
+        flex-direction: column;
+        gap: 6px;
+        color: var(--toolbar-text);
+        font-size: 14px;
+      }
+
+      .settings-form input {
+        width: 100%;
+        padding: 12px 14px;
+        border: 1px solid var(--border-color);
+        border-radius: 10px;
+        background: var(--control-bg);
+        color: var(--control-text);
+      }
+
+      .settings-error {
+        min-height: 18px;
+        color: #b42318;
+        font-size: 13px;
+      }
+
       .modal-actions {
         display: flex;
         justify-content: flex-end;
@@ -183,7 +214,8 @@
       .app-shell {
         display: grid;
         grid-template-columns: 280px 1fr;
-        min-height: 100vh;
+        height: 100vh;
+        overflow: hidden;
       }
 
       .sidebar {
@@ -191,6 +223,8 @@
         flex-direction: column;
         gap: 14px;
         padding: 18px;
+        min-height: 0;
+        overflow: hidden;
         background: var(--sidebar-bg);
         backdrop-filter: blur(14px);
         border-right: 1px solid var(--border-color);
@@ -225,11 +259,22 @@
       }
 
       .user-chip {
+        flex: 1;
         padding: 10px 12px;
         border-radius: 12px;
         background: var(--sidebar-active-bg);
         color: var(--sidebar-text);
         font-size: 14px;
+      }
+
+      .sidebar-user-row {
+        display: flex;
+        align-items: center;
+        gap: 8px;
+      }
+
+      .settings-button {
+        white-space: nowrap;
       }
 
       .sidebar-footer {
@@ -330,6 +375,8 @@
         display: flex;
         flex-direction: column;
         min-width: 0;
+        min-height: 0;
+        overflow: hidden;
       }
 
       .editor-area {
@@ -500,6 +547,28 @@
       </div>
     </div>
 
+    <div id="settingsBackdrop" class="modal-backdrop" hidden>
+      <div class="modal-card">
+        <h3>Account Settings</h3>
+        <p>Change your password for this account.</p>
+        <form id="settingsForm" class="settings-form">
+          <label>
+            Current Password
+            <input id="currentPasswordInput" type="password" autocomplete="current-password" required />
+          </label>
+          <label>
+            New Password
+            <input id="newPasswordInput" type="password" autocomplete="new-password" minlength="6" required />
+          </label>
+          <div id="settingsError" class="settings-error"></div>
+          <div class="modal-actions">
+            <button id="settingsCancel" type="button">Cancel</button>
+            <button id="settingsSave" type="submit">Save</button>
+          </div>
+        </form>
+      </div>
+    </div>
+
     <div id="appShell" class="app-shell" hidden>
       <aside class="sidebar">
         <div class="sidebar-top">
@@ -508,7 +577,10 @@
         </div>
         <div id="noteList" class="note-list"></div>
         <div class="sidebar-footer">
-          <div id="userChip" class="user-chip"></div>
+          <div class="sidebar-user-row">
+            <div id="userChip" class="user-chip"></div>
+            <button id="settingsButton" class="settings-button" type="button">Settings</button>
+          </div>
           <button id="logoutButton" class="logout-button" type="button">Log Out</button>
         </div>
       </aside>
@@ -564,6 +636,12 @@
     const modalInput = document.getElementById("modalInput");
     const modalCancel = document.getElementById("modalCancel");
     const modalConfirm = document.getElementById("modalConfirm");
+    const settingsBackdrop = document.getElementById("settingsBackdrop");
+    const settingsForm = document.getElementById("settingsForm");
+    const currentPasswordInput = document.getElementById("currentPasswordInput");
+    const newPasswordInput = document.getElementById("newPasswordInput");
+    const settingsError = document.getElementById("settingsError");
+    const settingsCancel = document.getElementById("settingsCancel");
 
     const editor = document.getElementById("editor");
     const noteList = document.getElementById("noteList");
@@ -576,6 +654,7 @@
     const boldToggle = document.getElementById("boldToggle");
     const underlineToggle = document.getElementById("underlineToggle");
     const logoutButton = document.getElementById("logoutButton");
+    const settingsButton = document.getElementById("settingsButton");
     const userChip = document.getElementById("userChip");
     const clientId = crypto.randomUUID();
 
@@ -826,6 +905,19 @@
       appShell.hidden = false;
     }
 
+    function closeSettingsModal() {
+      settingsBackdrop.hidden = true;
+      settingsError.textContent = "";
+      settingsForm.reset();
+    }
+
+    function openSettingsModal() {
+      settingsError.textContent = "";
+      settingsForm.reset();
+      settingsBackdrop.hidden = false;
+      currentPasswordInput.focus();
+    }
+
     function closeModal(result) {
       modalBackdrop.hidden = true;
       const resolver = modalResolver;
@@ -1020,6 +1112,7 @@
       activeNoteId = null;
       activeNoteVersion = 0;
       userChip.textContent = "";
+      closeSettingsModal();
       setActiveNote(null);
     }
 
@@ -1505,6 +1598,46 @@
         setActiveNote(data.note);
       } catch (_error) {
         alert("Could not create the note.");
+      }
+    });
+
+    settingsButton.addEventListener("click", () => {
+      if (!currentUser) {
+        return;
+      }
+
+      openSettingsModal();
+    });
+
+    settingsCancel.addEventListener("click", () => {
+      closeSettingsModal();
+    });
+
+    settingsBackdrop.addEventListener("click", (event) => {
+      if (event.target === settingsBackdrop) {
+        closeSettingsModal();
+      }
+    });
+
+    settingsForm.addEventListener("submit", async (event) => {
+      event.preventDefault();
+      settingsError.textContent = "";
+
+      try {
+        const data = await fetchJson("/api/auth/change-password", {
+          method: "POST",
+          body: JSON.stringify({
+            currentPassword: currentPasswordInput.value,
+            newPassword: newPasswordInput.value,
+          }),
+        });
+
+        saveSession(data.token);
+        currentUser = data.user;
+        userChip.textContent = `Signed in as ${currentUser.username}`;
+        closeSettingsModal();
+      } catch (error) {
+        settingsError.textContent = error.message;
       }
     });
 
