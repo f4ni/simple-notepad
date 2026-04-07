@@ -333,14 +333,12 @@
         opacity: 0.7;
       }
 
-      .note-actions {
-        display: flex;
-        align-items: center;
-        gap: 6px;
+      .note-menu-wrap {
+        position: relative;
         flex-shrink: 0;
       }
 
-      .note-action-button {
+      .note-menu-button {
         width: 26px;
         height: 26px;
         padding: 0;
@@ -351,6 +349,45 @@
         cursor: pointer;
         font-size: 12px;
         line-height: 1;
+        opacity: 0;
+        pointer-events: none;
+        transition: opacity 120ms ease;
+      }
+
+      .note-item:hover .note-menu-button,
+      .note-item:focus-within .note-menu-button,
+      .note-menu-button[aria-expanded="true"] {
+        opacity: 1;
+        pointer-events: auto;
+      }
+
+      .note-menu {
+        position: absolute;
+        right: 0;
+        top: calc(100% + 6px);
+        min-width: 110px;
+        background: var(--panel-bg);
+        border: 1px solid var(--border-color);
+        border-radius: 12px;
+        box-shadow: 0 12px 30px rgba(0, 0, 0, 0.12);
+        overflow: hidden;
+        z-index: 5;
+      }
+
+      .note-menu button {
+        width: 100%;
+        border: 0;
+        border-radius: 0;
+        background: transparent;
+        color: var(--sidebar-text);
+        text-align: left;
+        padding: 8px 10px;
+        cursor: pointer;
+        font-size: 13px;
+      }
+
+      .note-menu button:hover {
+        background: var(--sidebar-active-bg);
       }
 
       .main-panel {
@@ -381,6 +418,23 @@
       .note-heading {
         margin-right: auto;
         min-width: 180px;
+      }
+
+      .toolbar-group {
+        display: inline-flex;
+        align-items: center;
+        gap: 8px;
+        padding: 6px 8px;
+        border: 1px solid var(--border-color);
+        border-radius: 14px;
+        background: rgba(255, 255, 255, 0.18);
+      }
+
+      .toolbar-divider {
+        width: 1px;
+        align-self: stretch;
+        background: var(--border-color);
+        opacity: 0.85;
       }
 
       .note-heading-row {
@@ -575,21 +629,29 @@
             </div>
             <p id="activeNoteMeta">Choose a note to start editing.</p>
           </div>
-          <button id="boldToggle" type="button">B</button>
-          <button id="underlineToggle" type="button">U</button>
-          <label>
-            Background
-            <input id="backgroundPicker" type="color" value="#fffdf8" />
-          </label>
-          <label>
-            Theme
-            <select id="themeSelect">
-              <option value="sand">Sand</option>
-              <option value="mist">Mist</option>
-              <option value="forest">Forest</option>
-              <option value="midnight">Midnight</option>
-            </select>
-          </label>
+          <div class="toolbar-group">
+            <button id="boldToggle" type="button">B</button>
+            <button id="underlineToggle" type="button">U</button>
+          </div>
+          <div class="toolbar-divider" aria-hidden="true"></div>
+          <div class="toolbar-group">
+            <label>
+              Theme
+              <select id="themeSelect">
+                <option value="sand">Sand</option>
+                <option value="mist">Mist</option>
+                <option value="forest">Forest</option>
+                <option value="midnight">Midnight</option>
+              </select>
+            </label>
+          </div>
+          <div class="toolbar-divider" aria-hidden="true"></div>
+          <div class="toolbar-group">
+            <label>
+              Background
+              <input id="backgroundPicker" type="color" value="#fffdf8" />
+            </label>
+          </div>
         </div>
         <div class="editor-area">
           <div id="editor" class="editor" contenteditable="true" data-placeholder="Start typing..."></div>
@@ -1160,6 +1222,72 @@
       }
     }
 
+    function renderNotes() {
+      noteList.innerHTML = "";
+
+      notes.forEach((note) => {
+        const button = document.createElement("button");
+        button.type = "button";
+        button.className = "note-item";
+
+        if (note.id === activeNoteId) {
+          button.classList.add("active");
+        }
+
+        button.innerHTML = `
+          <div class="note-item-content">
+            <span class="note-item-title">${note.title}</span>
+            <span class="note-item-meta">${formatUpdatedAt(note.updatedAt)}</span>
+          </div>
+          <div class="note-menu-wrap">
+            <button class="note-menu-button" type="button" aria-label="Note actions" aria-expanded="false" title="More">&#8942;</button>
+            <div class="note-menu" hidden>
+              <button type="button" data-action="rename">Edit</button>
+              <button type="button" data-action="delete">Delete</button>
+            </div>
+          </div>
+        `;
+
+        button.addEventListener("click", () => {
+          openNote(note.id);
+        });
+
+        const menuButton = button.querySelector(".note-menu-button");
+        const menu = button.querySelector(".note-menu");
+        const renameButton = button.querySelector('[data-action="rename"]');
+        const deleteButton = button.querySelector('[data-action="delete"]');
+
+        menuButton.addEventListener("click", (event) => {
+          event.stopPropagation();
+          const shouldOpen = menu.hidden;
+          document.querySelectorAll(".note-menu").forEach((entry) => {
+            entry.hidden = true;
+          });
+          document.querySelectorAll(".note-menu-button").forEach((entry) => {
+            entry.setAttribute("aria-expanded", "false");
+          });
+          menu.hidden = !shouldOpen;
+          menuButton.setAttribute("aria-expanded", shouldOpen ? "true" : "false");
+        });
+
+        renameButton.addEventListener("click", async (event) => {
+          event.stopPropagation();
+          menu.hidden = true;
+          menuButton.setAttribute("aria-expanded", "false");
+          await renameNoteById(note.id);
+        });
+
+        deleteButton.addEventListener("click", async (event) => {
+          event.stopPropagation();
+          menu.hidden = true;
+          menuButton.setAttribute("aria-expanded", "false");
+          await deleteNoteById(note.id);
+        });
+
+        noteList.appendChild(button);
+      });
+    }
+
     async function fetchJson(url, options = {}) {
       const response = await fetch(url, {
         ...options,
@@ -1582,6 +1710,17 @@
     settingsBackdrop.addEventListener("click", (event) => {
       if (event.target === settingsBackdrop) {
         closeSettingsModal();
+      }
+    });
+
+    document.addEventListener("click", (event) => {
+      if (!event.target.closest(".note-menu-wrap")) {
+        document.querySelectorAll(".note-menu").forEach((entry) => {
+          entry.hidden = true;
+        });
+        document.querySelectorAll(".note-menu-button").forEach((entry) => {
+          entry.setAttribute("aria-expanded", "false");
+        });
       }
     });
 
