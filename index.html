@@ -117,6 +117,68 @@
         color: #b42318;
       }
 
+      .modal-backdrop {
+        position: fixed;
+        inset: 0;
+        background: rgba(15, 18, 26, 0.38);
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        padding: 24px;
+        z-index: 20;
+      }
+
+      .modal-card {
+        width: min(420px, 100%);
+        background: var(--panel-bg);
+        backdrop-filter: blur(14px);
+        border: 1px solid var(--border-color);
+        border-radius: 18px;
+        padding: 22px;
+      }
+
+      .modal-card h3 {
+        margin: 0 0 8px;
+        color: var(--toolbar-text);
+      }
+
+      .modal-card p {
+        margin: 0 0 16px;
+        color: var(--toolbar-text);
+        opacity: 0.82;
+      }
+
+      .modal-card input {
+        width: 100%;
+        padding: 12px 14px;
+        border: 1px solid var(--border-color);
+        border-radius: 10px;
+        background: var(--control-bg);
+        color: var(--control-text);
+        margin-bottom: 14px;
+      }
+
+      .modal-actions {
+        display: flex;
+        justify-content: flex-end;
+        gap: 10px;
+      }
+
+      .modal-actions button {
+        border: 1px solid var(--border-color);
+        border-radius: 10px;
+        padding: 10px 14px;
+        background: var(--control-bg);
+        color: var(--control-text);
+        cursor: pointer;
+      }
+
+      .modal-actions .danger-button {
+        background: #b42318;
+        border-color: #b42318;
+        color: #fff;
+      }
+
       .app-shell {
         display: grid;
         grid-template-columns: 280px 1fr;
@@ -147,6 +209,15 @@
       }
 
       .new-note-button {
+        padding: 10px 12px;
+        cursor: pointer;
+      }
+
+      .sidebar button {
+        border: 1px solid var(--border-color);
+        border-radius: 10px;
+        background: var(--control-bg);
+        color: var(--control-text);
         padding: 10px 12px;
         cursor: pointer;
       }
@@ -326,8 +397,8 @@
       }
 
       .logout-button {
-        min-width: 40px;
-        padding: 8px 10px;
+        width: 100%;
+        text-align: center;
       }
 
       .toolbar input[type="color"] {
@@ -414,6 +485,18 @@
       </div>
     </section>
 
+    <div id="modalBackdrop" class="modal-backdrop" hidden>
+      <div class="modal-card">
+        <h3 id="modalTitle"></h3>
+        <p id="modalMessage"></p>
+        <input id="modalInput" type="text" hidden />
+        <div class="modal-actions">
+          <button id="modalCancel" type="button">Cancel</button>
+          <button id="modalConfirm" type="button">Confirm</button>
+        </div>
+      </div>
+    </div>
+
     <div id="appShell" class="app-shell" hidden>
       <aside class="sidebar">
         <div class="sidebar-top">
@@ -472,6 +555,12 @@
     const authSubmit = document.getElementById("authSubmit");
     const authToggle = document.getElementById("authToggle");
     const authError = document.getElementById("authError");
+    const modalBackdrop = document.getElementById("modalBackdrop");
+    const modalTitle = document.getElementById("modalTitle");
+    const modalMessage = document.getElementById("modalMessage");
+    const modalInput = document.getElementById("modalInput");
+    const modalCancel = document.getElementById("modalCancel");
+    const modalConfirm = document.getElementById("modalConfirm");
 
     const editor = document.getElementById("editor");
     const noteList = document.getElementById("noteList");
@@ -498,6 +587,7 @@
     let sessionToken = localStorage.getItem(SESSION_KEY) || "";
     let currentUser = null;
     let authMode = "login";
+    let modalResolver = null;
 
     let preferences = {
       theme: "sand",
@@ -707,6 +797,77 @@
       authScreen.hidden = true;
       appShell.hidden = false;
     }
+
+    function closeModal(result) {
+      modalBackdrop.hidden = true;
+      const resolver = modalResolver;
+      modalResolver = null;
+
+      if (resolver) {
+        resolver(result);
+      }
+    }
+
+    function openTextModal({ title, message, value = "", confirmLabel = "Save" }) {
+      modalTitle.textContent = title;
+      modalMessage.textContent = message;
+      modalInput.hidden = false;
+      modalInput.value = value;
+      modalConfirm.textContent = confirmLabel;
+      modalConfirm.classList.remove("danger-button");
+      modalBackdrop.hidden = false;
+      modalInput.focus();
+      modalInput.select();
+
+      return new Promise((resolve) => {
+        modalResolver = resolve;
+      });
+    }
+
+    function openConfirmModal({ title, message, confirmLabel = "Delete" }) {
+      modalTitle.textContent = title;
+      modalMessage.textContent = message;
+      modalInput.hidden = true;
+      modalInput.value = "";
+      modalConfirm.textContent = confirmLabel;
+      modalConfirm.classList.add("danger-button");
+      modalBackdrop.hidden = false;
+      modalConfirm.focus();
+
+      return new Promise((resolve) => {
+        modalResolver = resolve;
+      });
+    }
+
+    modalCancel.addEventListener("click", () => {
+      closeModal(null);
+    });
+
+    modalConfirm.addEventListener("click", () => {
+      if (modalInput.hidden) {
+        closeModal(true);
+        return;
+      }
+
+      closeModal(modalInput.value.trim());
+    });
+
+    modalBackdrop.addEventListener("click", (event) => {
+      if (event.target === modalBackdrop) {
+        closeModal(null);
+      }
+    });
+
+    modalInput.addEventListener("keydown", (event) => {
+      if (event.key === "Enter") {
+        event.preventDefault();
+        closeModal(modalInput.value.trim());
+      }
+
+      if (event.key === "Escape") {
+        closeModal(null);
+      }
+    });
 
     function formatUpdatedAt(updatedAt) {
       if (!updatedAt) {
@@ -962,7 +1123,12 @@
     async function renameNoteById(noteId) {
       const currentTitle =
         notes.find((note) => note.id === noteId)?.title || "Untitled Note";
-      const nextTitle = prompt("Rename note:", currentTitle);
+      const nextTitle = await openTextModal({
+        title: "Rename Note",
+        message: "Choose a new name for this note.",
+        value: currentTitle,
+        confirmLabel: "Save",
+      });
 
       if (nextTitle === null) {
         return;
@@ -994,7 +1160,11 @@
     async function deleteNoteById(noteId) {
       const noteTitle =
         notes.find((note) => note.id === noteId)?.title || "this note";
-      const confirmed = window.confirm(`Delete "${noteTitle}"?`);
+      const confirmed = await openConfirmModal({
+        title: "Delete Note",
+        message: `Delete "${noteTitle}"? This cannot be undone.`,
+        confirmLabel: "Delete",
+      });
 
       if (!confirmed) {
         return;
@@ -1273,7 +1443,11 @@
     });
 
     newNoteButton.addEventListener("click", async () => {
-      const title = prompt("Name your new note:");
+      const title = await openTextModal({
+        title: "New Note",
+        message: "Give your new note a name.",
+        confirmLabel: "Create",
+      });
 
       if (!title) {
         return;
