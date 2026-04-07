@@ -274,7 +274,10 @@
       }
 
       .settings-button {
-        white-space: nowrap;
+        min-width: 34px;
+        padding: 7px 8px;
+        font-size: 15px;
+        line-height: 1;
       }
 
       .sidebar-footer {
@@ -330,45 +333,24 @@
         opacity: 0.7;
       }
 
-      .note-menu-wrap {
-        position: relative;
+      .note-actions {
+        display: flex;
+        align-items: center;
+        gap: 6px;
+        flex-shrink: 0;
       }
 
-      .note-menu-button {
-        border: 0;
-        background: transparent;
-        color: var(--sidebar-text);
-        cursor: pointer;
-        padding: 2px 6px;
+      .note-action-button {
+        width: 26px;
+        height: 26px;
+        padding: 0;
         border-radius: 8px;
-      }
-
-      .note-menu {
-        position: absolute;
-        right: 0;
-        top: calc(100% + 6px);
-        min-width: 120px;
-        background: var(--panel-bg);
         border: 1px solid var(--border-color);
-        border-radius: 12px;
-        box-shadow: 0 12px 30px rgba(0, 0, 0, 0.12);
-        overflow: hidden;
-        z-index: 5;
-      }
-
-      .note-menu button {
-        width: 100%;
-        border: 0;
-        background: transparent;
-        color: var(--sidebar-text);
-        text-align: left;
-        padding: 8px 10px;
+        background: var(--control-bg);
+        color: var(--control-text);
         cursor: pointer;
-        font-size: 13px;
-      }
-
-      .note-menu button:hover {
-        background: var(--sidebar-active-bg);
+        font-size: 12px;
+        line-height: 1;
       }
 
       .main-panel {
@@ -578,8 +560,8 @@
         <div id="noteList" class="note-list"></div>
         <div class="sidebar-footer">
           <div class="sidebar-user-row">
-            <div id="userChip" class="user-chip"></div>
-            <button id="settingsButton" class="settings-button" type="button">Settings</button>
+          <div id="userChip" class="user-chip"></div>
+            <button id="settingsButton" class="settings-button" type="button" aria-label="Settings" title="Settings">⚙</button>
           </div>
           <button id="logoutButton" class="logout-button" type="button">Log Out</button>
         </div>
@@ -1014,12 +996,9 @@
             <span class="note-item-title">${note.title}</span>
             <span class="note-item-meta">${formatUpdatedAt(note.updatedAt)}</span>
           </div>
-          <div class="note-menu-wrap">
-            <button class="note-menu-button" type="button" aria-label="Note actions">...</button>
-            <div class="note-menu" hidden>
-              <button type="button" data-action="rename">Rename</button>
-              <button type="button" data-action="delete">Delete</button>
-            </div>
+          <div class="note-actions">
+            <button class="note-action-button" type="button" data-action="rename" aria-label="Rename note" title="Rename">✎</button>
+            <button class="note-action-button" type="button" data-action="delete" aria-label="Delete note" title="Delete">×</button>
           </div>
         `;
 
@@ -1027,29 +1006,16 @@
           openNote(note.id);
         });
 
-        const menuButton = button.querySelector(".note-menu-button");
-        const menu = button.querySelector(".note-menu");
-        const renameButton = menu.querySelector('[data-action="rename"]');
-        const deleteButton = menu.querySelector('[data-action="delete"]');
-
-        menuButton.addEventListener("click", (event) => {
-          event.stopPropagation();
-          const shouldOpen = menu.hidden;
-          document.querySelectorAll(".note-menu").forEach((entry) => {
-            entry.hidden = true;
-          });
-          menu.hidden = !shouldOpen;
-        });
+        const renameButton = button.querySelector('[data-action="rename"]');
+        const deleteButton = button.querySelector('[data-action="delete"]');
 
         renameButton.addEventListener("click", async (event) => {
           event.stopPropagation();
-          menu.hidden = true;
           await renameNoteById(note.id);
         });
 
         deleteButton.addEventListener("click", async (event) => {
           event.stopPropagation();
-          menu.hidden = true;
           await deleteNoteById(note.id);
         });
 
@@ -1644,14 +1610,6 @@
     logoutButton.addEventListener("click", () => {
       clearSessionState();
       showAuthScreen();
-    });
-
-    document.addEventListener("click", (event) => {
-      if (!event.target.closest(".note-menu-wrap")) {
-        document.querySelectorAll(".note-menu").forEach((entry) => {
-          entry.hidden = true;
-        });
-      }
     });
 
     syncIntervalId = setInterval(() => {
