@@ -766,6 +766,10 @@
       return escapeHtml(value).replace(/\n/g, "<br>");
     }
 
+    function plainTextToHtml(value) {
+      return escapeHtml(value.replace(/\r\n?/g, "\n")).replace(/\n/g, "<br>");
+    }
+
     function setEditorMarkup(value) {
       editor.innerHTML = normalizeStoredContent(value);
     }
@@ -1614,14 +1618,12 @@
     editor.addEventListener("paste", (event) => {
       event.preventDefault();
 
-      const html = event.clipboardData?.getData("text/html");
       const text = event.clipboardData?.getData("text/plain") || "";
-      const safeHtml = html ? sanitizeHtml(html) : escapeHtml(text).replace(/\n/g, "<br>");
-
-      insertHtmlAtCursor(safeHtml);
+      insertHtmlAtCursor(plainTextToHtml(text));
       queueSend();
       updateFormattingButtons();
     });
+
 
     editor.addEventListener("wheel", (event) => {
       if (!event.ctrlKey) {
