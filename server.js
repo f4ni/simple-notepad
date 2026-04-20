@@ -10,16 +10,16 @@ const app = express();
 const FILE = "data.txt";
 const PORT = process.env.PORT || 3000;
 const DATABASE_URL = process.env.DATABASE_URL;
-const PASSCODE = process.env.NOTEPAD_PASSCODE;
-const MAX_AUTH_ATTEMPTS = 5;
+const SESSION_SECRET = process.env.SESSION_SECRET;
+const SESSION_TTL_MS = 1000 * 60 * 60 * 24 * 30;
 
 if (!DATABASE_URL) {
   console.error("Missing DATABASE_URL environment variable.");
   process.exit(1);
 }
 
-if (!PASSCODE) {
-  console.error("Missing NOTEPAD_PASSCODE environment variable.");
+if (!SESSION_SECRET) {
+  console.error("Missing SESSION_SECRET environment variable.");
   process.exit(1);
 }
 
@@ -35,64 +35,264 @@ app.get("/", (_req, res) => {
 });
 
 let notesCache = new Map();
+let usersCache = new Map();
+let notePermissionsCache = new Map();
 let wss;
 let updateChain = Promise.resolve();
 
-function isValidPasscode(input) {
-  if (typeof input !== "string") {
+function base64UrlEncode(value) {
+  return Buffer.from(value)
+    .toString("base64")
+    .replace(/\+/g, "-")
+    .replace(/\//g, "_")
+    .replace(/=+$/g, "");
+}
+
+function base64UrlDecode(value) {
+  const normalized = value.replace(/-/g, "+").replace(/_/g, "/");
+  const padding = "=".repeat((4 - (normalized.length % 4)) % 4);
+  return Buffer.from(normalized + padding, "base64").toString("utf8");
+}
+
+function signTokenPayload(payload) {
+  return crypto
+    .createHmac("sha256", SESSION_SECRET)
+    .update(payload)
+    .digest("base64url");
+}
+
+function createSessionToken(user) {
+  const payload = JSON.stringify({
+    userId: user.id,
+    username: user.username,
+    exp: Date.now() + SESSION_TTL_MS,
+  });
+  const encodedPayload = base64UrlEncode(payload);
+  const signature = signTokenPayload(encodedPayload);
+  return `${encodedPayload}.${signature}`;
+}
+
+function verifySessionToken(token) {
+  if (typeof token !== "string") {
+    return null;
+  }
+
+  const [encodedPayload, signature] = token.split(".");
+
+  if (!encodedPayload || !signature) {
+    return null;
+  }
+
+  const expectedSignature = signTokenPayload(encodedPayload);
+  const actualSignature = Buffer.from(signature);
+  const expectedBuffer = Buffer.from(expectedSignature);
+
+  if (
+    actualSignature.length !== expectedBuffer.length ||
+    !crypto.timingSafeEqual(actualSignature, expectedBuffer)
+  ) {
+    return null;
+  }
+
+  try {
+    const payload = JSON.parse(base64UrlDecode(encodedPayload));
+
+    if (payload.exp < Date.now()) {
+      return null;
+    }
+
+    return payload;
+  } catch (_error) {
+    return null;
+  }
+}
+
+function hashPassword(password) {
+  const salt = crypto.randomBytes(16).toString("hex");
+  const hash = crypto.scryptSync(password, salt, 64).toString("hex");
+  return `${salt}:${hash}`;
+}
+
+function verifyPassword(password, storedHash) {
+  if (typeof storedHash !== "string" || !storedHash.includes(":")) {
     return false;
   }
 
-  const expected = Buffer.from(PASSCODE, "utf8");
-  const actual = Buffer.from(input, "utf8");
+  const [salt, expectedHash] = storedHash.split(":");
+  const actualHash = crypto.scryptSync(password, salt, 64).toString("hex");
+  const expectedBuffer = Buffer.from(expectedHash, "hex");
+  const actualBuffer = Buffer.from(actualHash, "hex");
 
-  if (expected.length !== actual.length) {
-    return false;
+  return (
+    expectedBuffer.length === actualBuffer.length &&
+    crypto.timingSafeEqual(expectedBuffer, actualBuffer)
+  );
+}
+
+function getBearerToken(req) {
+  const header = req.get("authorization") || "";
+
+  if (!header.startsWith("Bearer ")) {
+    return null;
   }
 
-  return crypto.timingSafeEqual(expected, actual);
+  return header.slice("Bearer ".length);
 }
 
 function ensureAuthorized(req, res, next) {
-  const passcode = req.get("x-notepad-passcode");
+  const token = getBearerToken(req);
+  const payload = verifySessionToken(token);
 
-  if (!isValidPasscode(passcode)) {
+  if (!payload) {
     res.status(401).json({ error: "Unauthorized" });
     return;
   }
 
+  const user = usersCache.get(payload.userId);
+
+  if (!user) {
+    res.status(401).json({ error: "Unauthorized" });
+    return;
+  }
+
+  req.user = user;
   next();
 }
 
-function makeNoteSummary(note) {
+function isValidPermissionRole(role) {
+  return role === "viewer" || role === "editor";
+}
+
+function isEditableRole(role) {
+  return role === "owner" || role === "editor";
+}
+
+function getNotePermissionMap(noteId) {
+  if (!notePermissionsCache.has(noteId)) {
+    notePermissionsCache.set(noteId, new Map());
+  }
+
+  return notePermissionsCache.get(noteId);
+}
+
+function getNoteAccessRole(note, userId) {
+  if (!note || !userId) {
+    return null;
+  }
+
+  if (note.owner_id === userId) {
+    return "owner";
+  }
+
+  return getNotePermissionMap(note.id).get(userId) || null;
+}
+
+function getAccessibleUserIdsForNote(note) {
+  const users = new Set();
+
+  if (note?.owner_id) {
+    users.add(note.owner_id);
+  }
+
+  getNotePermissionMap(note.id).forEach((_role, userId) => {
+    users.add(userId);
+  });
+
+  return Array.from(users);
+}
+
+function makeNoteSummary(note, userId) {
+  const accessRole = getNoteAccessRole(note, userId);
+
   return {
     id: note.id,
     title: note.title,
     version: note.version,
     updatedAt: note.updated_at,
+    accessRole,
+    isOwner: accessRole === "owner",
   };
 }
 
-function getSortedNoteSummaries() {
+function getUserNotes(userId) {
   return Array.from(notesCache.values())
+    .filter((note) => Boolean(getNoteAccessRole(note, userId)))
     .sort((left, right) => {
       return new Date(right.updated_at).getTime() - new Date(left.updated_at).getTime();
-    })
-    .map(makeNoteSummary);
+    });
 }
 
-function broadcast(payload) {
+function getUserNoteSummaries(userId) {
+  return getUserNotes(userId).map((note) => makeNoteSummary(note, userId));
+}
+
+function broadcastToUser(userId, payload) {
+  if (!wss) {
+    return;
+  }
+
   wss.clients.forEach((client) => {
-    if (client.readyState === WebSocket.OPEN && client.isAuthenticated) {
+    if (
+      client.readyState === WebSocket.OPEN &&
+      client.isAuthenticated &&
+      client.userId === userId
+    ) {
       client.send(JSON.stringify(payload));
     }
   });
 }
 
-function broadcastNotesList() {
-  broadcast({
+function broadcastToUsers(userIds, payload) {
+  userIds.forEach((userId) => {
+    broadcastToUser(userId, payload);
+  });
+}
+
+function broadcastNotesList(userId) {
+  broadcastToUser(userId, {
     type: "notes-list",
-    notes: getSortedNoteSummaries(),
+    notes: getUserNoteSummaries(userId),
+  });
+}
+
+function broadcastNotesListsForUsers(userIds) {
+  userIds.forEach((userId) => {
+    broadcastNotesList(userId);
+  });
+}
+
+async function refreshUsersCache() {
+  const result = await pool.query(`
+    SELECT id, username, password_hash, created_at
+    FROM users
+  `);
+
+  usersCache = new Map(result.rows.map((row) => [row.id, row]));
+}
+
+async function refreshNotesCache() {
+  const result = await pool.query(`
+    SELECT id, owner_id, title, content, version, updated_at
+    FROM notes
+  `);
+
+  notesCache = new Map(result.rows.map((row) => [row.id, row]));
+}
+
+async function refreshNotePermissionsCache() {
+  const result = await pool.query(`
+    SELECT note_id, user_id, role
+    FROM note_permissions
+  `);
+
+  notePermissionsCache = new Map();
+
+  result.rows.forEach((row) => {
+    if (!notePermissionsCache.has(row.note_id)) {
+      notePermissionsCache.set(row.note_id, new Map());
+    }
+
+    notePermissionsCache.get(row.note_id).set(row.user_id, row.role);
   });
 }
 
@@ -100,8 +300,18 @@ async function initializeStorage() {
   const seedText = fs.existsSync(FILE) ? fs.readFileSync(FILE, "utf8") : "";
 
   await pool.query(`
+    CREATE TABLE IF NOT EXISTS users (
+      id UUID PRIMARY KEY,
+      username TEXT NOT NULL UNIQUE,
+      password_hash TEXT NOT NULL,
+      created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+    )
+  `);
+
+  await pool.query(`
     CREATE TABLE IF NOT EXISTS notes (
       id UUID PRIMARY KEY,
+      owner_id UUID REFERENCES users(id) ON DELETE CASCADE,
       title TEXT NOT NULL,
       content TEXT NOT NULL DEFAULT '',
       version INTEGER NOT NULL DEFAULT 0,
@@ -111,7 +321,23 @@ async function initializeStorage() {
 
   await pool.query(`
     ALTER TABLE notes
+    ADD COLUMN IF NOT EXISTS owner_id UUID REFERENCES users(id) ON DELETE CASCADE
+  `);
+
+  await pool.query(`
+    ALTER TABLE notes
     ADD COLUMN IF NOT EXISTS version INTEGER NOT NULL DEFAULT 0
+  `);
+
+  await pool.query(`
+    CREATE TABLE IF NOT EXISTS note_permissions (
+      note_id UUID REFERENCES notes(id) ON DELETE CASCADE,
+      user_id UUID REFERENCES users(id) ON DELETE CASCADE,
+      role TEXT NOT NULL CHECK (role IN ('viewer', 'editor')),
+      granted_by UUID REFERENCES users(id) ON DELETE SET NULL,
+      created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+      PRIMARY KEY (note_id, user_id)
+    )
   `);
 
   await pool.query(`
@@ -124,41 +350,113 @@ async function initializeStorage() {
   `);
 
   const noteCountResult = await pool.query("SELECT COUNT(*)::int AS count FROM notes");
-  const noteCount = noteCountResult.rows[0]?.count || 0;
 
-  if (noteCount === 0) {
+  if ((noteCountResult.rows[0]?.count || 0) === 0) {
     const legacyResult = await pool.query(
       "SELECT content FROM shared_note WHERE id = 1 LIMIT 1"
     );
     const legacyText = legacyResult.rows[0]?.content ?? seedText;
 
-    await createNote("My First Note", legacyText);
+    if (legacyText) {
+      await pool.query(
+        `
+          INSERT INTO notes (id, owner_id, title, content)
+          VALUES ($1, NULL, $2, $3)
+        `,
+        [crypto.randomUUID(), "My First Note", legacyText]
+      );
+    }
   }
 
+  await refreshUsersCache();
   await refreshNotesCache();
+  await refreshNotePermissionsCache();
 }
 
-async function refreshNotesCache() {
-  const result = await pool.query(`
-    SELECT id, title, content, version, updated_at
-    FROM notes
-  `);
+async function getUserByUsername(username) {
+  const normalizedUsername = username.trim().toLowerCase();
 
-  notesCache = new Map(result.rows.map((row) => [row.id, row]));
+  const result = await pool.query(
+    `
+      SELECT id, username, password_hash, created_at
+      FROM users
+      WHERE username = $1
+      LIMIT 1
+    `,
+    [normalizedUsername]
+  );
+
+  return result.rows[0] || null;
 }
 
-async function createNote(title, content = "") {
+async function createUser(username, password) {
+  const normalizedUsername = username.trim().toLowerCase();
+  const passwordHash = hashPassword(password);
+  const userId = crypto.randomUUID();
+
+  const result = await pool.query(
+    `
+      INSERT INTO users (id, username, password_hash)
+      VALUES ($1, $2, $3)
+      RETURNING id, username, password_hash, created_at
+    `,
+    [userId, normalizedUsername, passwordHash]
+  );
+
+  const user = result.rows[0];
+  usersCache.set(user.id, user);
+
+  const usersCountResult = await pool.query("SELECT COUNT(*)::int AS count FROM users");
+
+  if ((usersCountResult.rows[0]?.count || 0) === 1) {
+    await pool.query(
+      `
+        UPDATE notes
+        SET owner_id = $1
+        WHERE owner_id IS NULL
+      `,
+      [user.id]
+    );
+    await refreshNotesCache();
+  }
+
+  return user;
+}
+
+async function updateUserPassword(userId, nextPassword) {
+  const passwordHash = hashPassword(nextPassword);
+
+  const result = await pool.query(
+    `
+      UPDATE users
+      SET password_hash = $1
+      WHERE id = $2
+      RETURNING id, username, password_hash, created_at
+    `,
+    [passwordHash, userId]
+  );
+
+  const user = result.rows[0] || null;
+
+  if (user) {
+    usersCache.set(user.id, user);
+  }
+
+  return user;
+}
+
+async function createNote(ownerId, title, content = "") {
   const noteId = crypto.randomUUID();
   const trimmedTitle = typeof title === "string" ? title.trim() : "";
   const safeTitle = trimmedTitle || "Untitled Note";
 
   const result = await pool.query(
     `
-      INSERT INTO notes (id, title, content)
-      VALUES ($1, $2, $3)
-      RETURNING id, title, content, version, updated_at
+      INSERT INTO notes (id, owner_id, title, content)
+      VALUES ($1, $2, $3, $4)
+      RETURNING id, owner_id, title, content, version, updated_at
     `,
-    [noteId, safeTitle, content]
+    [noteId, ownerId, safeTitle, content]
   );
 
   const note = result.rows[0];
@@ -166,8 +464,37 @@ async function createNote(title, content = "") {
   return note;
 }
 
-function getNoteById(noteId) {
-  return notesCache.get(noteId) || null;
+function getNoteByIdForUser(noteId, userId) {
+  const note = notesCache.get(noteId) || null;
+
+  if (!note || !getNoteAccessRole(note, userId)) {
+    return null;
+  }
+
+  return note;
+}
+
+function getOwnedNoteByIdForUser(noteId, userId) {
+  const note = notesCache.get(noteId) || null;
+
+  if (!note || note.owner_id !== userId) {
+    return null;
+  }
+
+  return note;
+}
+
+function getNoteAccessForUser(noteId, userId) {
+  const note = notesCache.get(noteId) || null;
+
+  if (!note) {
+    return { note: null, accessRole: null };
+  }
+
+  return {
+    note,
+    accessRole: getNoteAccessRole(note, userId),
+  };
 }
 
 async function saveNoteContent(noteId, nextText) {
@@ -176,7 +503,7 @@ async function saveNoteContent(noteId, nextText) {
       UPDATE notes
       SET content = $1, version = version + 1, updated_at = NOW()
       WHERE id = $2
-      RETURNING id, title, content, version, updated_at
+      RETURNING id, owner_id, title, content, version, updated_at
     `,
     [nextText, noteId]
   );
@@ -199,7 +526,7 @@ async function renameNote(noteId, nextTitle) {
       UPDATE notes
       SET title = $1, updated_at = NOW()
       WHERE id = $2
-      RETURNING id, title, content, version, updated_at
+      RETURNING id, owner_id, title, content, version, updated_at
     `,
     [safeTitle, noteId]
   );
@@ -213,6 +540,92 @@ async function renameNote(noteId, nextTitle) {
   return note;
 }
 
+async function deleteNote(noteId) {
+  const result = await pool.query(
+    `
+      DELETE FROM notes
+      WHERE id = $1
+      RETURNING id, owner_id, title, content, version, updated_at
+    `,
+    [noteId]
+  );
+
+  const note = result.rows[0] || null;
+
+  if (note) {
+    notesCache.delete(note.id);
+    notePermissionsCache.delete(note.id);
+  }
+
+  return note;
+}
+
+async function grantNotePermission(noteId, userId, role, grantedByUserId) {
+  if (!isValidPermissionRole(role)) {
+    return null;
+  }
+
+  const result = await pool.query(
+    `
+      INSERT INTO note_permissions (note_id, user_id, role, granted_by)
+      VALUES ($1, $2, $3, $4)
+      ON CONFLICT (note_id, user_id)
+      DO UPDATE SET role = EXCLUDED.role, granted_by = EXCLUDED.granted_by
+      RETURNING note_id, user_id, role
+    `,
+    [noteId, userId, role, grantedByUserId]
+  );
+
+  const permission = result.rows[0] || null;
+
+  if (permission) {
+    getNotePermissionMap(permission.note_id).set(permission.user_id, permission.role);
+  }
+
+  return permission;
+}
+
+async function revokeNotePermission(noteId, userId) {
+  const result = await pool.query(
+    `
+      DELETE FROM note_permissions
+      WHERE note_id = $1 AND user_id = $2
+      RETURNING note_id, user_id
+    `,
+    [noteId, userId]
+  );
+
+  const deleted = result.rows[0] || null;
+
+  if (deleted) {
+    getNotePermissionMap(noteId).delete(userId);
+  }
+
+  return deleted;
+}
+
+function getCollaboratorsForNote(note) {
+  const collaborators = [];
+
+  getNotePermissionMap(note.id).forEach((role, userId) => {
+    const user = usersCache.get(userId);
+
+    if (!user) {
+      return;
+    }
+
+    collaborators.push({
+      userId: user.id,
+      username: user.username,
+      role,
+    });
+  });
+
+  return collaborators.sort((left, right) => {
+    return left.username.localeCompare(right.username);
+  });
+}
+
 function enqueueNoteUpdate(noteId, nextText, sourceClientId) {
   updateChain = updateChain
     .then(async () => {
@@ -222,7 +635,9 @@ function enqueueNoteUpdate(noteId, nextText, sourceClientId) {
         return;
       }
 
-      broadcast({
+      const userIds = getAccessibleUserIdsForNote(note);
+
+      broadcastToUsers(userIds, {
         type: "note-update",
         noteId: note.id,
         text: note.content,
@@ -231,7 +646,7 @@ function enqueueNoteUpdate(noteId, nextText, sourceClientId) {
         sourceClientId: sourceClientId || null,
       });
 
-      broadcastNotesList();
+      broadcastNotesListsForUsers(userIds);
     })
     .catch((error) => {
       console.error("Failed to persist update:", error);
@@ -240,15 +655,124 @@ function enqueueNoteUpdate(noteId, nextText, sourceClientId) {
   return updateChain;
 }
 
-function attachApiRoutes() {
-  app.get("/api/notes", ensureAuthorized, (_req, res) => {
-    res.json({ notes: getSortedNoteSummaries() });
+function attachAuthRoutes() {
+  app.post("/api/auth/register", async (req, res) => {
+    try {
+      const username = typeof req.body?.username === "string" ? req.body.username : "";
+      const password = typeof req.body?.password === "string" ? req.body.password : "";
+
+      if (username.trim().length < 3 || password.length < 6) {
+        res.status(400).json({
+          error: "Username must be at least 3 characters and password at least 6.",
+        });
+        return;
+      }
+
+      if (await getUserByUsername(username)) {
+        res.status(409).json({ error: "Username already exists." });
+        return;
+      }
+
+      const user = await createUser(username, password);
+      const token = createSessionToken(user);
+
+      res.status(201).json({
+        token,
+        user: {
+          id: user.id,
+          username: user.username,
+        },
+      });
+    } catch (error) {
+      console.error("Failed to register:", error);
+      res.status(500).json({ error: "Could not register user." });
+    }
+  });
+
+  app.post("/api/auth/login", async (req, res) => {
+    try {
+      const username = typeof req.body?.username === "string" ? req.body.username : "";
+      const password = typeof req.body?.password === "string" ? req.body.password : "";
+      const user = await getUserByUsername(username);
+
+      if (!user || !verifyPassword(password, user.password_hash)) {
+        res.status(401).json({ error: "Invalid username or password." });
+        return;
+      }
+
+      const token = createSessionToken(user);
+
+      res.json({
+        token,
+        user: {
+          id: user.id,
+          username: user.username,
+        },
+      });
+    } catch (error) {
+      console.error("Failed to login:", error);
+      res.status(500).json({ error: "Could not log in." });
+    }
+  });
+
+  app.get("/api/auth/me", ensureAuthorized, (req, res) => {
+    res.json({
+      user: {
+        id: req.user.id,
+        username: req.user.username,
+      },
+    });
+  });
+
+  app.post("/api/auth/change-password", ensureAuthorized, async (req, res) => {
+    try {
+      const currentPassword =
+        typeof req.body?.currentPassword === "string" ? req.body.currentPassword : "";
+      const newPassword =
+        typeof req.body?.newPassword === "string" ? req.body.newPassword : "";
+
+      if (!verifyPassword(currentPassword, req.user.password_hash)) {
+        res.status(401).json({ error: "Current password is incorrect." });
+        return;
+      }
+
+      if (newPassword.length < 6) {
+        res.status(400).json({ error: "New password must be at least 6 characters." });
+        return;
+      }
+
+      if (verifyPassword(newPassword, req.user.password_hash)) {
+        res.status(400).json({ error: "New password must be different from the current password." });
+        return;
+      }
+
+      await updateUserPassword(req.user.id, newPassword);
+      const refreshedUser = usersCache.get(req.user.id);
+      const token = createSessionToken(refreshedUser);
+
+      res.json({
+        token,
+        user: {
+          id: refreshedUser.id,
+          username: refreshedUser.username,
+        },
+      });
+    } catch (error) {
+      console.error("Failed to change password:", error);
+      res.status(500).json({ error: "Could not change password." });
+    }
+  });
+}
+
+function attachNoteRoutes() {
+  app.get("/api/notes", ensureAuthorized, (req, res) => {
+    res.json({ notes: getUserNoteSummaries(req.user.id) });
   });
 
   app.get("/api/notes/:id", ensureAuthorized, (req, res) => {
-    const note = getNoteById(req.params.id);
+    const { note, accessRole } = getNoteAccessForUser(req.params.id, req.user.id);
 
-    if (!note) {
+    if (!note || !accessRole) {
       res.status(404).json({ error: "Note not found" });
       return;
     }
@@ -260,6 +784,8 @@ function attachApiRoutes() {
         text: note.content,
         version: note.version,
         updatedAt: note.updated_at,
+        accessRole,
+        isOwner: accessRole === "owner",
       },
     });
   });
@@ -267,12 +793,14 @@ function attachApiRoutes() {
   app.post("/api/notes", ensureAuthorized, async (req, res) => {
     try {
       const title = typeof req.body?.title === "string" ? req.body.title : "";
-      const note = await createNote(title, "");
-      broadcast({
+      const note = await createNote(req.user.id, title, "");
+
+      broadcastToUser(req.user.id, {
         type: "note-created",
-        note: makeNoteSummary(note),
+        note: makeNoteSummary(note, req.user.id),
       });
-      broadcastNotesList();
+      broadcastNotesList(req.user.id);
+
       res.status(201).json({
         note: {
           id: note.id,
@@ -280,6 +808,8 @@ function attachApiRoutes() {
           text: note.content,
           version: note.version,
           updatedAt: note.updated_at,
+          accessRole: "owner",
+          isOwner: true,
         },
       });
     } catch (error) {
@@ -290,6 +820,18 @@ function attachApiRoutes() {
 
   app.patch("/api/notes/:id", ensureAuthorized, async (req, res) => {
     try {
+      const { note: existingNote, accessRole } = getNoteAccessForUser(req.params.id, req.user.id);
+
+      if (!existingNote || !accessRole) {
+        res.status(404).json({ error: "Note not found" });
+        return;
+      }
+
+      if (!isEditableRole(accessRole)) {
+        res.status(403).json({ error: "You only have view access to this note." });
+        return;
+      }
+
       const title = typeof req.body?.title === "string" ? req.body.title : "";
       const note = await renameNote(req.params.id, title);
 
@@ -298,11 +840,18 @@ function attachApiRoutes() {
         return;
       }
 
-      broadcast({
+      const accessibleUsers = getAccessibleUserIdsForNote(note);
+
+      broadcastToUsers(accessibleUsers, {
         type: "note-renamed",
-        note: makeNoteSummary(note),
+        note: {
+          id: note.id,
+          title: note.title,
+          version: note.version,
+          updatedAt: note.updated_at,
+        },
       });
-      broadcastNotesList();
+      broadcastNotesListsForUsers(accessibleUsers);
 
       res.json({
         note: {
@@ -311,11 +860,148 @@ function attachApiRoutes() {
           text: note.content,
           version: note.version,
           updatedAt: note.updated_at,
+          accessRole,
+          isOwner: accessRole === "owner",
         },
       });
     } catch (error) {
       console.error("Failed to rename note:", error);
       res.status(500).json({ error: "Could not rename note" });
+    }
+  });
+
+  app.get("/api/notes/:id/shares", ensureAuthorized, (req, res) => {
+    const note = getOwnedNoteByIdForUser(req.params.id, req.user.id);
+
+    if (!note) {
+      res.status(404).json({ error: "Note not found" });
+      return;
+    }
+
+    res.json({
+      collaborators: getCollaboratorsForNote(note),
+    });
+  });
+
+  app.post("/api/notes/:id/share", ensureAuthorized, async (req, res) => {
+    try {
+      const note = getOwnedNoteByIdForUser(req.params.id, req.user.id);
+
+      if (!note) {
+        res.status(404).json({ error: "Note not found" });
+        return;
+      }
+
+      const username = typeof req.body?.username === "string" ? req.body.username : "";
+      const role = typeof req.body?.role === "string" ? req.body.role.trim().toLowerCase() : "";
+
+      if (!username.trim()) {
+        res.status(400).json({ error: "Username is required." });
+        return;
+      }
+
+      if (!isValidPermissionRole(role)) {
+        res.status(400).json({ error: "Role must be viewer or editor." });
+        return;
+      }
+
+      const targetUser = await getUserByUsername(username);
+
+      if (!targetUser) {
+        res.status(404).json({ error: "User not found." });
+        return;
+      }
+
+      if (targetUser.id === req.user.id) {
+        res.status(400).json({ error: "You already own this note." });
+        return;
+      }
+
+      const permission = await grantNotePermission(note.id, targetUser.id, role, req.user.id);
+
+      if (!permission) {
+        res.status(500).json({ error: "Could not update sharing permissions." });
+        return;
+      }
+
+      const accessibleUsers = getAccessibleUserIdsForNote(note);
+      broadcastNotesListsForUsers(accessibleUsers);
+
+      res.status(201).json({
+        shared: true,
+        collaborator: {
+          userId: targetUser.id,
+          username: targetUser.username,
+          role,
+        },
+      });
+    } catch (error) {
+      console.error("Failed to share note:", error);
+      res.status(500).json({ error: "Could not share note." });
+    }
+  });
+
+  app.delete("/api/notes/:id/share/:userId", ensureAuthorized, async (req, res) => {
+    try {
+      const note = getOwnedNoteByIdForUser(req.params.id, req.user.id);
+
+      if (!note) {
+        res.status(404).json({ error: "Note not found" });
+        return;
+      }
+
+      if (req.params.userId === req.user.id) {
+        res.status(400).json({ error: "Owner access cannot be revoked." });
+        return;
+      }
+
+      const removed = await revokeNotePermission(note.id, req.params.userId);
+
+      if (!removed) {
+        res.status(404).json({ error: "Collaborator not found." });
+        return;
+      }
+
+      broadcastToUser(req.params.userId, {
+        type: "note-access-revoked",
+        noteId: note.id,
+      });
+
+      const accessibleUsers = getAccessibleUserIdsForNote(note);
+      broadcastNotesListsForUsers([...accessibleUsers, req.params.userId]);
+
+      res.json({ removed: true });
+    } catch (error) {
+      console.error("Failed to revoke note access:", error);
+      res.status(500).json({ error: "Could not revoke note access." });
+    }
+  });
+
+  app.delete("/api/notes/:id", ensureAuthorized, async (req, res) => {
+    try {
+      const note = getOwnedNoteByIdForUser(req.params.id, req.user.id);
+
+      if (!note) {
+        res.status(404).json({ error: "Note not found" });
+        return;
+      }
+
+      const accessibleUsers = getAccessibleUserIdsForNote(note);
+      await deleteNote(req.params.id);
+
+      broadcastToUsers(accessibleUsers, {
+        type: "note-deleted",
+        noteId: note.id,
+      });
+      broadcastNotesListsForUsers(accessibleUsers);
+
+      res.json({
+        deleted: true,
+        noteId: note.id,
+      });
+    } catch (error) {
+      console.error("Failed to delete note:", error);
+      res.status(500).json({ error: "Could not delete note" });
     }
   });
 }
@@ -325,35 +1011,38 @@ function attachWebSocketServer(server) {
 
   wss.on("connection", (ws) => {
     ws.isAuthenticated = false;
-    ws.failedAuthAttempts = 0;
     ws.clientId = null;
+    ws.userId = null;
 
     ws.on("message", async (message) => {
       try {
         const data = JSON.parse(message);
 
         if (data.type === "auth") {
-          if (!isValidPasscode(data.pass)) {
-            ws.failedAuthAttempts += 1;
+          const payload = verifySessionToken(data.token);
+          const user = payload ? usersCache.get(payload.userId) : null;
+
+          if (!user) {
             ws.send(JSON.stringify({ type: "auth-error" }));
-
-            if (ws.failedAuthAttempts >= MAX_AUTH_ATTEMPTS) {
-              ws.close();
-            }
-
+            ws.close();
             return;
           }
 
           ws.isAuthenticated = true;
           ws.clientId = typeof data.clientId === "string" ? data.clientId : null;
-          ws.failedAuthAttempts = 0;
+          ws.userId = user.id;
 
-          const notes = getSortedNoteSummaries();
-          const firstNote = notes[0] ? getNoteById(notes[0].id) : null;
+          const notes = getUserNoteSummaries(user.id);
+          const firstNote = notes[0] ? getNoteByIdForUser(notes[0].id, user.id) : null;
+          const firstNoteRole = firstNote ? getNoteAccessRole(firstNote, user.id) : null;
 
           ws.send(
             JSON.stringify({
               type: "init",
+              user: {
+                id: user.id,
+                username: user.username,
+              },
               notes,
               activeNote: firstNote
                 ? {
@@ -362,6 +1051,8 @@ function attachWebSocketServer(server) {
                     text: firstNote.content,
                     version: firstNote.version,
                     updatedAt: firstNote.updated_at,
+                    accessRole: firstNoteRole,
+                    isOwner: firstNoteRole === "owner",
                   }
                 : null,
             })
@@ -369,7 +1060,7 @@ function attachWebSocketServer(server) {
           return;
         }
 
-        if (!ws.isAuthenticated) {
+        if (!ws.isAuthenticated || !ws.userId) {
           ws.close();
           return;
         }
@@ -377,8 +1068,9 @@ function attachWebSocketServer(server) {
         if (data.type === "update-note") {
           const noteId = typeof data.noteId === "string" ? data.noteId : "";
           const nextText = typeof data.text === "string" ? data.text : "";
+          const { note, accessRole } = getNoteAccessForUser(noteId, ws.userId);
 
-          if (!getNoteById(noteId)) {
+          if (!note || !accessRole || !isEditableRole(accessRole)) {
             return;
           }
 
@@ -393,7 +1085,8 @@ function attachWebSocketServer(server) {
 
 async function start() {
   await initializeStorage();
-  attachApiRoutes();
+  attachAuthRoutes();
+  attachNoteRoutes();
 
   const server = app.listen(PORT, () => {
     console.log("Running on port " + PORT);

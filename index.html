@@ -2,6 +2,17 @@
 <html>
   <head>
     <title>Simple Notepad</title>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <meta name="theme-color" content="#1f1a14" />
+    <meta name="mobile-web-app-capable" content="yes" />
+    <meta name="apple-mobile-web-app-capable" content="yes" />
+    <meta name="apple-mobile-web-app-status-bar-style" content="default" />
+    <meta name="apple-mobile-web-app-title" content="Simple Notepad" />
+    <meta name="description" content="A private multi-note app with sync, formatting, and installable app support." />
+    <link rel="manifest" href="/manifest.webmanifest" />
+    <link rel="icon" href="/icons/icon.svg" type="image/svg+xml" />
+    <link rel="apple-touch-icon" href="/icons/icon-192.svg" />
     <style>
       :root {
         --page-bg: #f3f0e8;
@@ -27,7 +38,9 @@
 
       body {
         margin: 0;
-        min-height: 100vh;
+        min-height: 100dvh;
+        height: 100dvh;
+        overflow: hidden;
         font-family: "Segoe UI", Arial, sans-serif;
         background:
           radial-gradient(circle at top left, var(--page-accent), transparent 28%),
@@ -35,10 +48,174 @@
         color: var(--editor-text);
       }
 
+      button,
+      input,
+      select {
+        font: inherit;
+      }
+
+      .auth-screen {
+        min-height: 100vh;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        padding: 24px;
+      }
+
+      .auth-card {
+        width: min(420px, 100%);
+        background: var(--panel-bg);
+        backdrop-filter: blur(14px);
+        border: 1px solid var(--border-color);
+        border-radius: 20px;
+        padding: 28px;
+      }
+
+      .auth-card h1 {
+        margin: 0 0 8px;
+      }
+
+      .auth-card p {
+        margin: 0 0 20px;
+        opacity: 0.75;
+      }
+
+      .auth-form {
+        display: flex;
+        flex-direction: column;
+        gap: 12px;
+      }
+
+      .auth-form input,
+      .auth-form button,
+      .toolbar select,
+      .toolbar input[type="color"],
+      .toolbar button,
+      .new-note-button {
+        border: 1px solid var(--border-color);
+        border-radius: 10px;
+        background: var(--control-bg);
+        color: var(--control-text);
+      }
+
+      .auth-form input,
+      .auth-form button {
+        padding: 12px 14px;
+      }
+
+      .auth-toggle {
+        margin-top: 16px;
+        background: none;
+        border: 0;
+        padding: 0;
+        color: var(--toolbar-text);
+        cursor: pointer;
+        text-decoration: underline;
+      }
+
+      .auth-error {
+        min-height: 20px;
+        margin-top: 12px;
+        color: #b42318;
+      }
+
+      .modal-backdrop {
+        position: fixed;
+        inset: 0;
+        background: rgba(15, 18, 26, 0.38);
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        padding: 24px;
+        z-index: 20;
+      }
+
+      .modal-card {
+        width: min(420px, 100%);
+        background: var(--panel-bg);
+        backdrop-filter: blur(14px);
+        border: 1px solid var(--border-color);
+        border-radius: 18px;
+        padding: 22px;
+      }
+
+      .modal-card h3 {
+        margin: 0 0 8px;
+        color: var(--toolbar-text);
+      }
+
+      .modal-card p {
+        margin: 0 0 16px;
+        color: var(--toolbar-text);
+        opacity: 0.82;
+      }
+
+      .modal-card input {
+        width: 100%;
+        padding: 12px 14px;
+        border: 1px solid var(--border-color);
+        border-radius: 10px;
+        background: var(--control-bg);
+        color: var(--control-text);
+        margin-bottom: 14px;
+      }
+
+      .settings-form {
+        display: flex;
+        flex-direction: column;
+        gap: 12px;
+      }
+
+      .settings-form label {
+        display: flex;
+        flex-direction: column;
+        gap: 6px;
+        color: var(--toolbar-text);
+        font-size: 14px;
+      }
+
+      .settings-form input {
+        width: 100%;
+        padding: 12px 14px;
+        border: 1px solid var(--border-color);
+        border-radius: 10px;
+        background: var(--control-bg);
+        color: var(--control-text);
+      }
+
+      .settings-error {
+        min-height: 18px;
+        color: #b42318;
+        font-size: 13px;
+      }
+
+      .modal-actions {
+        display: flex;
+        justify-content: flex-end;
+        gap: 10px;
+      }
+
+      .modal-actions button {
+        border: 1px solid var(--border-color);
+        border-radius: 10px;
+        padding: 8px 12px;
+        background: var(--control-bg);
+        color: var(--control-text);
+        cursor: pointer;
+        font-size: 13px;
+      }
+
+      .modal-actions .danger-button {
+        background: #b42318;
+        border-color: #b42318;
+        color: #fff;
+      }
+
       .app-shell {
         display: grid;
         grid-template-columns: 280px 1fr;
-        min-height: 100vh;
+        height: 100dvh;
+        overflow: hidden;
       }
 
       .sidebar {
@@ -46,6 +223,8 @@
         flex-direction: column;
         gap: 14px;
         padding: 18px;
+        min-height: 0;
+        overflow: hidden;
         background: var(--sidebar-bg);
         backdrop-filter: blur(14px);
         border-right: 1px solid var(--border-color);
@@ -64,20 +243,49 @@
         color: var(--sidebar-text);
       }
 
-      .new-note-button,
-      .toolbar select,
-      .toolbar input[type="color"],
-      .toolbar button {
+      .new-note-button {
+        padding: 7px 10px;
+        font-size: 13px;
+      }
+
+      .sidebar button {
         border: 1px solid var(--border-color);
         border-radius: 10px;
         background: var(--control-bg);
         color: var(--control-text);
+        padding: 7px 10px;
+        cursor: pointer;
+        font-size: 13px;
+      }
+
+      .user-chip {
+        flex: 1;
+        padding: 10px 12px;
+        border-radius: 12px;
+        background: var(--sidebar-active-bg);
+        color: var(--sidebar-text);
         font-size: 14px;
       }
 
-      .new-note-button {
-        padding: 10px 12px;
-        cursor: pointer;
+      .sidebar-user-row {
+        display: flex;
+        align-items: center;
+        gap: 8px;
+      }
+
+      .settings-button {
+        min-width: 34px;
+        padding: 7px 8px;
+        font-size: 15px;
+        line-height: 1;
+      }
+
+      .sidebar-footer {
+        display: flex;
+        flex-direction: column;
+        gap: 10px;
+        margin-top: auto;
+        padding-top: 8px;
       }
 
       .note-list {
@@ -96,6 +304,10 @@
         background: transparent;
         color: var(--sidebar-text);
         cursor: pointer;
+        display: flex;
+        align-items: flex-start;
+        justify-content: space-between;
+        gap: 10px;
       }
 
       .note-item.active {
@@ -103,10 +315,16 @@
         border-color: var(--border-color);
       }
 
+      .note-item-content {
+        flex: 1;
+        min-width: 0;
+      }
+
       .note-item-title {
         display: block;
         font-weight: 700;
         margin-bottom: 4px;
+        word-break: break-word;
       }
 
       .note-item-meta {
@@ -115,10 +333,69 @@
         opacity: 0.7;
       }
 
+      .note-menu-wrap {
+        position: relative;
+        flex-shrink: 0;
+      }
+
+      .note-menu-button {
+        width: 26px;
+        height: 26px;
+        padding: 0;
+        border-radius: 8px;
+        border: 1px solid var(--border-color);
+        background: var(--control-bg);
+        color: var(--control-text);
+        cursor: pointer;
+        font-size: 12px;
+        line-height: 1;
+        opacity: 0;
+        pointer-events: none;
+        transition: opacity 120ms ease;
+      }
+
+      .note-item:hover .note-menu-button,
+      .note-item:focus-within .note-menu-button,
+      .note-menu-button[aria-expanded="true"] {
+        opacity: 1;
+        pointer-events: auto;
+      }
+
+      .note-menu {
+        position: absolute;
+        right: 0;
+        top: calc(100% + 6px);
+        min-width: 110px;
+        background: var(--panel-bg);
+        border: 1px solid var(--border-color);
+        border-radius: 12px;
+        box-shadow: 0 12px 30px rgba(0, 0, 0, 0.12);
+        overflow: hidden;
+        z-index: 5;
+      }
+
+      .note-menu button {
+        width: 100%;
+        border: 0;
+        border-radius: 0;
+        background: transparent;
+        color: var(--sidebar-text);
+        text-align: left;
+        padding: 8px 10px;
+        cursor: pointer;
+        font-size: 13px;
+      }
+
+      .note-menu button:hover {
+        background: var(--sidebar-active-bg);
+      }
+
       .main-panel {
         display: flex;
         flex-direction: column;
         min-width: 0;
+        min-height: 0;
+        overflow: hidden;
       }
 
       .editor-area {
@@ -143,13 +420,31 @@
         min-width: 180px;
       }
 
+      .toolbar-group {
+        display: inline-flex;
+        align-items: center;
+        gap: 8px;
+        padding: 6px 8px;
+        border: 1px solid var(--border-color);
+        border-radius: 14px;
+        background: rgba(255, 255, 255, 0.18);
+      }
+
+      .toolbar-divider {
+        width: 1px;
+        align-self: stretch;
+        background: var(--border-color);
+        opacity: 0.85;
+      }
+
       .note-heading-row {
         display: flex;
         align-items: center;
         gap: 10px;
       }
 
-      .note-heading h2 {
+      .note-heading h2,
+      .session-status {
         margin: 0;
         font-size: 20px;
         color: var(--toolbar-text);
@@ -187,9 +482,9 @@
         color: var(--control-active-text);
       }
 
-      .rename-button {
-        min-width: 40px;
-        padding: 8px 10px;
+      .logout-button {
+        width: 100%;
+        text-align: center;
       }
 
       .toolbar input[type="color"] {
@@ -214,6 +509,22 @@
         word-break: break-word;
       }
 
+      .editor *,
+      .editor font {
+        font-size: inherit !important;
+        line-height: inherit !important;
+      }
+
+      .editor ul,
+      .editor ol {
+        margin: 0 0 0 24px;
+        padding: 0;
+      }
+
+      .editor li {
+        margin: 4px 0;
+      }
+
       .editor:empty:before {
         content: attr(data-placeholder);
         color: rgba(127, 127, 127, 0.8);
@@ -228,27 +539,128 @@
         color: var(--toolbar-text);
       }
 
+      [hidden] {
+        display: none !important;
+      }
+
       @media (max-width: 900px) {
+        body {
+          height: auto;
+          min-height: 100dvh;
+          overflow: auto;
+        }
+
         .app-shell {
           grid-template-columns: 1fr;
+          grid-template-rows: auto 1fr;
+          min-height: 100dvh;
+          height: auto;
         }
 
         .sidebar {
           border-right: 0;
           border-bottom: 1px solid var(--border-color);
+          max-height: 38dvh;
+          padding: 12px;
+        }
+
+        .toolbar {
+          gap: 8px;
+          padding: 10px 12px;
+        }
+
+        .note-heading {
+          min-width: 0;
+          width: 100%;
+          margin-right: 0;
+        }
+
+        .editor {
+          padding: 14px;
+          font-size: 16px;
+        }
+      }
+
+      @media (max-width: 560px) {
+        .auth-screen {
+          padding: 12px;
+        }
+
+        .auth-card {
+          border-radius: 14px;
+          padding: 18px;
+        }
+
+        .sidebar {
+          max-height: 42dvh;
         }
       }
     </style>
   </head>
 
   <body>
-    <div class="app-shell">
+    <section id="authScreen" class="auth-screen">
+      <div class="auth-card">
+        <h1 id="authTitle">Sign In</h1>
+        <p id="authSubtitle">Your notes stay private to your account.</p>
+        <form id="authForm" class="auth-form">
+          <input id="usernameInput" type="text" placeholder="Username" autocomplete="username" required />
+          <input id="passwordInput" type="password" placeholder="Password" autocomplete="current-password" required />
+          <button id="authSubmit" type="submit">Sign In</button>
+        </form>
+        <div id="authError" class="auth-error"></div>
+        <button id="authToggle" class="auth-toggle" type="button">Need an account? Register</button>
+      </div>
+    </section>
+
+    <div id="modalBackdrop" class="modal-backdrop" hidden>
+      <div class="modal-card">
+        <h3 id="modalTitle"></h3>
+        <p id="modalMessage"></p>
+        <input id="modalInput" type="text" hidden />
+        <div class="modal-actions">
+          <button id="modalCancel" type="button">Cancel</button>
+          <button id="modalConfirm" type="button">Confirm</button>
+        </div>
+      </div>
+    </div>
+
+    <div id="settingsBackdrop" class="modal-backdrop" hidden>
+      <div class="modal-card">
+        <h3>Account Settings</h3>
+        <p>Change your password for this account.</p>
+        <form id="settingsForm" class="settings-form">
+          <label>
+            Current Password
+            <input id="currentPasswordInput" type="password" autocomplete="current-password" required />
+          </label>
+          <label>
+            New Password
+            <input id="newPasswordInput" type="password" autocomplete="new-password" minlength="6" required />
+          </label>
+          <div id="settingsError" class="settings-error"></div>
+          <div class="modal-actions">
+            <button id="settingsCancel" type="button">Cancel</button>
+            <button id="settingsSave" type="submit">Save</button>
+          </div>
+        </form>
+      </div>
+    </div>
+
+    <div id="appShell" class="app-shell" hidden>
       <aside class="sidebar">
         <div class="sidebar-top">
           <h1 class="sidebar-title">Notes</h1>
           <button id="newNoteButton" class="new-note-button" type="button">New</button>
         </div>
         <div id="noteList" class="note-list"></div>
+        <div class="sidebar-footer">
+          <div class="sidebar-user-row">
+          <div id="userChip" class="user-chip"></div>
+            <button id="settingsButton" class="settings-button" type="button" aria-label="Settings" title="Settings">⚙</button>
+          </div>
+          <button id="logoutButton" class="logout-button" type="button">Log Out</button>
+        </div>
       </aside>
 
       <main class="main-panel">
@@ -256,51 +668,83 @@
           <div class="note-heading">
             <div class="note-heading-row">
               <h2 id="activeNoteTitle">Loading...</h2>
-              <button id="renameNoteButton" class="rename-button" type="button" title="Rename note">Edit</button>
             </div>
             <p id="activeNoteMeta">Choose a note to start editing.</p>
           </div>
-          <label>
-            Theme
-            <select id="themeSelect">
-              <option value="sand">Sand</option>
-              <option value="mist">Mist</option>
-              <option value="forest">Forest</option>
-              <option value="midnight">Midnight</option>
-            </select>
-          </label>
-          <label>
-            Background
-            <input id="backgroundPicker" type="color" value="#fffdf8" />
-          </label>
-          <button id="boldToggle" type="button">B</button>
-          <button id="underlineToggle" type="button">U</button>
+          <div class="toolbar-group">
+            <button id="boldToggle" type="button">B</button>
+            <button id="underlineToggle" type="button">U</button>
+          </div>
+          <div class="toolbar-divider" aria-hidden="true"></div>
+          <div class="toolbar-group">
+            <label>
+              Theme
+              <select id="themeSelect">
+                <option value="sand">Sand</option>
+                <option value="mist">Mist</option>
+                <option value="forest">Forest</option>
+                <option value="midnight">Midnight</option>
+              </select>
+            </label>
+          </div>
+          <div class="toolbar-divider" aria-hidden="true"></div>
+          <div class="toolbar-group">
+            <label>
+              Background
+              <input id="backgroundPicker" type="color" value="#fffdf8" />
+            </label>
+          </div>
         </div>
         <div class="editor-area">
           <div id="editor" class="editor" contenteditable="true" data-placeholder="Start typing..."></div>
-          <div id="emptyState" class="empty-state" hidden>Create a note from the sidebar to get started.</div>
+          <div id="emptyState" class="empty-state" hidden>Create your first private note from the sidebar.</div>
         </div>
       </main>
     </div>
 
     <script>
     const STORAGE_KEY = "simple-notepad-preferences";
+    const SESSION_KEY = "simple-notepad-session";
+
+    const authScreen = document.getElementById("authScreen");
+    const appShell = document.getElementById("appShell");
+    const authTitle = document.getElementById("authTitle");
+    const authSubtitle = document.getElementById("authSubtitle");
+    const authForm = document.getElementById("authForm");
+    const usernameInput = document.getElementById("usernameInput");
+    const passwordInput = document.getElementById("passwordInput");
+    const authSubmit = document.getElementById("authSubmit");
+    const authToggle = document.getElementById("authToggle");
+    const authError = document.getElementById("authError");
+    const modalBackdrop = document.getElementById("modalBackdrop");
+    const modalTitle = document.getElementById("modalTitle");
+    const modalMessage = document.getElementById("modalMessage");
+    const modalInput = document.getElementById("modalInput");
+    const modalCancel = document.getElementById("modalCancel");
+    const modalConfirm = document.getElementById("modalConfirm");
+    const settingsBackdrop = document.getElementById("settingsBackdrop");
+    const settingsForm = document.getElementById("settingsForm");
+    const currentPasswordInput = document.getElementById("currentPasswordInput");
+    const newPasswordInput = document.getElementById("newPasswordInput");
+    const settingsError = document.getElementById("settingsError");
+    const settingsCancel = document.getElementById("settingsCancel");
+
     const editor = document.getElementById("editor");
     const noteList = document.getElementById("noteList");
     const newNoteButton = document.getElementById("newNoteButton");
     const activeNoteTitle = document.getElementById("activeNoteTitle");
     const activeNoteMeta = document.getElementById("activeNoteMeta");
-    const renameNoteButton = document.getElementById("renameNoteButton");
     const emptyState = document.getElementById("emptyState");
     const themeSelect = document.getElementById("themeSelect");
     const backgroundPicker = document.getElementById("backgroundPicker");
     const boldToggle = document.getElementById("boldToggle");
     const underlineToggle = document.getElementById("underlineToggle");
+    const logoutButton = document.getElementById("logoutButton");
+    const settingsButton = document.getElementById("settingsButton");
+    const userChip = document.getElementById("userChip");
     const clientId = crypto.randomUUID();
 
     let ws;
-    let passcode = "";
-    let isAuthenticated = false;
     let reconnectTimeoutId = null;
     let sendTimeoutId = null;
     let syncIntervalId = null;
@@ -308,13 +752,33 @@
     let notes = [];
     let activeNoteId = null;
     let activeNoteVersion = 0;
+    let activeNoteAccessRole = null;
+    let sessionToken = localStorage.getItem(SESSION_KEY) || "";
+    let currentUser = null;
+    let authMode = "login";
+    let modalResolver = null;
 
     let preferences = {
       theme: "sand",
       background: "#fffdf8",
+      fontSize: 18,
     };
 
+    const MIN_EDITOR_FONT_SIZE = 14;
+    const MAX_EDITOR_FONT_SIZE = 32;
+    const EDITOR_FONT_STEP = 1;
+
     editor.contentEditable = "false";
+
+    function saveSession(token) {
+      sessionToken = token;
+
+      if (token) {
+        localStorage.setItem(SESSION_KEY, token);
+      } else {
+        localStorage.removeItem(SESSION_KEY);
+      }
+    }
 
     function savePreferences() {
       localStorage.setItem(STORAGE_KEY, JSON.stringify(preferences));
@@ -345,6 +809,10 @@
       return escapeHtml(value).replace(/\n/g, "<br>");
     }
 
+    function plainTextToHtml(value) {
+      return escapeHtml(value.replace(/\r\n?/g, "\n")).replace(/\n/g, "<br>");
+    }
+
     function setEditorMarkup(value) {
       editor.innerHTML = normalizeStoredContent(value);
     }
@@ -356,6 +824,25 @@
     function updateFormattingButtons() {
       boldToggle.classList.toggle("active", document.queryCommandState("bold"));
       underlineToggle.classList.toggle("active", document.queryCommandState("underline"));
+    }
+
+    function canEditNoteRole(accessRole) {
+      return accessRole === "owner" || accessRole === "editor";
+    }
+
+    function canEditActiveNote() {
+      return canEditNoteRole(activeNoteAccessRole);
+    }
+
+    function getActiveNoteSummary() {
+      return notes.find((note) => note.id === activeNoteId) || null;
+    }
+
+    function syncActiveEditorAccess() {
+      const canEdit = Boolean(sessionToken && activeNoteId && canEditActiveNote());
+      editor.contentEditable = canEdit ? "true" : "false";
+      boldToggle.disabled = !canEdit;
+      underlineToggle.disabled = !canEdit;
     }
 
     function getReadableTextColor(backgroundColor) {
@@ -458,10 +945,26 @@
       document.documentElement.style.setProperty("--control-active-text", selectedTheme.controlActiveText);
       document.documentElement.style.setProperty("--page-accent", selectedTheme.pageAccent);
       document.documentElement.style.setProperty("--page-gradient-end", selectedTheme.pageGradientEnd);
+      editor.style.fontSize = `${preferences.fontSize}px`;
 
       themeSelect.value = preferences.theme;
       backgroundPicker.value = preferences.background;
       updateFormattingButtons();
+    }
+
+    function adjustEditorFontSize(direction) {
+      const nextSize = Math.max(
+        MIN_EDITOR_FONT_SIZE,
+        Math.min(MAX_EDITOR_FONT_SIZE, preferences.fontSize + direction * EDITOR_FONT_STEP),
+      );
+
+      if (nextSize === preferences.fontSize) {
+        return;
+      }
+
+      preferences.fontSize = nextSize;
+      savePreferences();
+      applyPreferences();
     }
 
     function loadPreferences() {
@@ -477,8 +980,124 @@
         }
       }
 
+      preferences.fontSize = Number.isFinite(Number(preferences.fontSize))
+        ? Math.max(MIN_EDITOR_FONT_SIZE, Math.min(MAX_EDITOR_FONT_SIZE, Number(preferences.fontSize)))
+        : 18;
+
       applyPreferences();
     }
+
+    function setAuthMode(mode) {
+      authMode = mode;
+      authTitle.textContent = mode === "login" ? "Sign In" : "Create Account";
+      authSubtitle.textContent =
+        mode === "login"
+          ? "Your notes stay private to your account."
+          : "Create a username and password to keep your notes private.";
+      authSubmit.textContent = mode === "login" ? "Sign In" : "Register";
+      authToggle.textContent =
+        mode === "login" ? "Need an account? Register" : "Already have an account? Sign In";
+      passwordInput.autocomplete =
+        mode === "login" ? "current-password" : "new-password";
+      authError.textContent = "";
+    }
+
+    function showAuthScreen() {
+      authScreen.hidden = false;
+      appShell.hidden = true;
+      if (ws && ws.readyState === WebSocket.OPEN) {
+        ws.close();
+      }
+    }
+
+    function showApp() {
+      authScreen.hidden = true;
+      appShell.hidden = false;
+    }
+
+    function closeSettingsModal() {
+      settingsBackdrop.hidden = true;
+      settingsError.textContent = "";
+      settingsForm.reset();
+    }
+
+    function openSettingsModal() {
+      settingsError.textContent = "";
+      settingsForm.reset();
+      settingsBackdrop.hidden = false;
+      currentPasswordInput.focus();
+    }
+
+    function closeModal(result) {
+      modalBackdrop.hidden = true;
+      const resolver = modalResolver;
+      modalResolver = null;
+
+      if (resolver) {
+        resolver(result);
+      }
+    }
+
+    function openTextModal({ title, message, value = "", confirmLabel = "Save" }) {
+      modalTitle.textContent = title;
+      modalMessage.textContent = message;
+      modalInput.hidden = false;
+      modalInput.value = value;
+      modalConfirm.textContent = confirmLabel;
+      modalConfirm.classList.remove("danger-button");
+      modalBackdrop.hidden = false;
+      modalInput.focus();
+      modalInput.select();
+
+      return new Promise((resolve) => {
+        modalResolver = resolve;
+      });
+    }
+
+    function openConfirmModal({ title, message, confirmLabel = "Delete" }) {
+      modalTitle.textContent = title;
+      modalMessage.textContent = message;
+      modalInput.hidden = true;
+      modalInput.value = "";
+      modalConfirm.textContent = confirmLabel;
+      modalConfirm.classList.add("danger-button");
+      modalBackdrop.hidden = false;
+      modalConfirm.focus();
+
+      return new Promise((resolve) => {
+        modalResolver = resolve;
+      });
+    }
+
+    modalCancel.addEventListener("click", () => {
+      closeModal(null);
+    });
+
+    modalConfirm.addEventListener("click", () => {
+      if (modalInput.hidden) {
+        closeModal(true);
+        return;
+      }
+
+      closeModal(modalInput.value.trim());
+    });
+
+    modalBackdrop.addEventListener("click", (event) => {
+      if (event.target === modalBackdrop) {
+        closeModal(null);
+      }
+    });
+
+    modalInput.addEventListener("keydown", (event) => {
+      if (event.key === "Enter") {
+        event.preventDefault();
+        closeModal(modalInput.value.trim());
+      }
+
+      if (event.key === "Escape") {
+        closeModal(null);
+      }
+    });
 
     function formatUpdatedAt(updatedAt) {
       if (!updatedAt) {
@@ -488,46 +1107,28 @@
       return new Date(updatedAt).toLocaleString();
     }
 
-    function renderNotes() {
-      noteList.innerHTML = "";
-
-      notes.forEach((note) => {
-        const button = document.createElement("button");
-        button.type = "button";
-        button.className = "note-item";
-
-        if (note.id === activeNoteId) {
-          button.classList.add("active");
-        }
-
-        button.innerHTML = `
-          <span class="note-item-title">${note.title}</span>
-          <span class="note-item-meta">${formatUpdatedAt(note.updatedAt)}</span>
-        `;
-
-        button.addEventListener("click", () => {
-          openNote(note.id);
-        });
-
-        noteList.appendChild(button);
-      });
-    }
 
     function setEmptyState(isEmpty) {
       emptyState.hidden = !isEmpty;
-      emptyState.style.display = isEmpty ? "flex" : "none";
       editor.hidden = isEmpty;
-      editor.style.display = isEmpty ? "none" : "block";
-      editor.contentEditable = isEmpty || !isAuthenticated || !activeNoteId ? "false" : "true";
-      renameNoteButton.disabled = isEmpty || !activeNoteId;
+
+      if (isEmpty) {
+        editor.contentEditable = "false";
+        boldToggle.disabled = true;
+        underlineToggle.disabled = true;
+        return;
+      }
+
+      syncActiveEditorAccess();
     }
 
     function setActiveNote(note) {
       if (!note) {
         activeNoteId = null;
         activeNoteVersion = 0;
+        activeNoteAccessRole = null;
         activeNoteTitle.textContent = "No note selected";
-        activeNoteMeta.textContent = "Create a note from the sidebar.";
+        activeNoteMeta.textContent = "Create your first private note from the sidebar.";
         setEditorMarkup("");
         setEmptyState(true);
         renderNotes();
@@ -536,20 +1137,22 @@
 
       activeNoteId = note.id;
       activeNoteVersion = note.version || 0;
+      activeNoteAccessRole = note.accessRole || null;
       activeNoteTitle.textContent = note.title;
-      activeNoteMeta.textContent = `Last updated ${formatUpdatedAt(note.updatedAt)}`;
+      const roleLabel = note.accessRole === "viewer" ? " - View only" : "";
+      activeNoteMeta.textContent = `Last updated ${formatUpdatedAt(note.updatedAt)}${roleLabel}`;
       setEditorMarkup(note.text || "");
       setEmptyState(false);
-      editor.contentEditable = isAuthenticated ? "true" : "false";
+      syncActiveEditorAccess();
       renderNotes();
       updateFormattingButtons();
     }
 
     function upsertNoteSummary(note) {
-      const existingIndex = notes.findIndex((entry) => entry.id === note.id);
+      const index = notes.findIndex((entry) => entry.id === note.id);
 
-      if (existingIndex >= 0) {
-        notes[existingIndex] = { ...notes[existingIndex], ...note };
+      if (index >= 0) {
+        notes[index] = { ...notes[index], ...note };
       } else {
         notes.push(note);
       }
@@ -559,34 +1162,369 @@
       });
     }
 
+    function removeNoteSummary(noteId) {
+      notes = notes.filter((note) => note.id !== noteId);
+    }
+
+    function clearSessionState() {
+      currentUser = null;
+      saveSession("");
+      notes = [];
+      activeNoteId = null;
+      activeNoteVersion = 0;
+      activeNoteAccessRole = null;
+      userChip.textContent = "";
+      closeSettingsModal();
+      setActiveNote(null);
+    }
+
+    function sanitizeNode(node) {
+      if (node.nodeType === Node.TEXT_NODE) {
+        return document.createTextNode(node.textContent || "");
+      }
+
+      if (node.nodeType !== Node.ELEMENT_NODE) {
+        return document.createDocumentFragment();
+      }
+
+      const tag = node.tagName.toLowerCase();
+      const allowedTags = new Set([
+        "b",
+        "strong",
+        "u",
+        "br",
+        "div",
+        "p",
+        "ul",
+        "ol",
+        "li",
+      ]);
+
+      if (!allowedTags.has(tag)) {
+        const fragment = document.createDocumentFragment();
+        Array.from(node.childNodes).forEach((child) => {
+          fragment.appendChild(sanitizeNode(child));
+        });
+        return fragment;
+      }
+
+      const clean = document.createElement(tag);
+      Array.from(node.childNodes).forEach((child) => {
+        clean.appendChild(sanitizeNode(child));
+      });
+      return clean;
+    }
+
+    function sanitizeHtml(html) {
+      const template = document.createElement("template");
+      template.innerHTML = html;
+      const fragment = document.createDocumentFragment();
+
+      Array.from(template.content.childNodes).forEach((child) => {
+        fragment.appendChild(sanitizeNode(child));
+      });
+
+      const wrapper = document.createElement("div");
+      wrapper.appendChild(fragment);
+      return wrapper.innerHTML;
+    }
+
+    function insertHtmlAtCursor(html) {
+      editor.focus();
+      const selection = window.getSelection();
+
+      if (!selection || selection.rangeCount === 0) {
+        editor.insertAdjacentHTML("beforeend", html);
+        return;
+      }
+
+      const range = selection.getRangeAt(0);
+      range.deleteContents();
+
+      const template = document.createElement("template");
+      template.innerHTML = html;
+      const fragment = template.content;
+      const lastNode = fragment.lastChild;
+
+      range.insertNode(fragment);
+
+      if (lastNode) {
+        range.setStartAfter(lastNode);
+        range.collapse(true);
+        selection.removeAllRanges();
+        selection.addRange(range);
+      }
+    }
+
+    function renderNotes() {
+      noteList.innerHTML = "";
+
+      notes.forEach((note) => {
+        const canEdit = canEditNoteRole(note.accessRole);
+        const canDelete = note.accessRole === "owner";
+        const canShare = note.accessRole === "owner";
+        const hasMenuActions = canEdit || canDelete || canShare;
+        const roleSuffix = note.accessRole === "viewer" ? " - View only" : "";
+        const menuActions = [
+          canShare ? '<button type="button" data-action="share">Share</button>' : "",
+          canEdit ? '<button type="button" data-action="rename">Edit</button>' : "",
+          canDelete ? '<button type="button" data-action="delete">Delete</button>' : "",
+        ].join("");
+
+        const button = document.createElement("button");
+        button.type = "button";
+        button.className = "note-item";
+
+        if (note.id === activeNoteId) {
+          button.classList.add("active");
+        }
+
+        button.innerHTML = `
+          <div class="note-item-content">
+            <span class="note-item-title">${note.title}</span>
+            <span class="note-item-meta">${formatUpdatedAt(note.updatedAt)}${roleSuffix}</span>
+          </div>
+          <div class="note-menu-wrap">
+            <button class="note-menu-button" type="button" aria-label="Note actions" aria-expanded="false" title="More" ${hasMenuActions ? "" : "hidden"}>&#8942;</button>
+            <div class="note-menu" hidden>
+              ${menuActions}
+            </div>
+          </div>
+        `;
+
+        button.addEventListener("click", () => {
+          openNote(note.id);
+        });
+
+        const menuButton = button.querySelector(".note-menu-button");
+        const menu = button.querySelector(".note-menu");
+        const shareButton = button.querySelector('[data-action="share"]');
+        const renameButton = button.querySelector('[data-action="rename"]');
+        const deleteButton = button.querySelector('[data-action="delete"]');
+
+        menuButton.addEventListener("click", (event) => {
+          event.stopPropagation();
+          const shouldOpen = menu.hidden;
+          document.querySelectorAll(".note-menu").forEach((entry) => {
+            entry.hidden = true;
+          });
+          document.querySelectorAll(".note-menu-button").forEach((entry) => {
+            entry.setAttribute("aria-expanded", "false");
+          });
+          menu.hidden = !shouldOpen;
+          menuButton.setAttribute("aria-expanded", shouldOpen ? "true" : "false");
+        });
+
+        if (shareButton) {
+          shareButton.addEventListener("click", async (event) => {
+            event.stopPropagation();
+            menu.hidden = true;
+            menuButton.setAttribute("aria-expanded", "false");
+            await shareNoteById(note.id);
+          });
+        }
+
+        if (renameButton) {
+          renameButton.addEventListener("click", async (event) => {
+            event.stopPropagation();
+            menu.hidden = true;
+            menuButton.setAttribute("aria-expanded", "false");
+            await renameNoteById(note.id);
+          });
+        }
+
+        if (deleteButton) {
+          deleteButton.addEventListener("click", async (event) => {
+            event.stopPropagation();
+            menu.hidden = true;
+            menuButton.setAttribute("aria-expanded", "false");
+            await deleteNoteById(note.id);
+          });
+        }
+
+        noteList.appendChild(button);
+      });
+    }
+
     async function fetchJson(url, options = {}) {
       const response = await fetch(url, {
         ...options,
         headers: {
           "Content-Type": "application/json",
-          "x-notepad-passcode": passcode,
+          ...(sessionToken ? { authorization: `Bearer ${sessionToken}` } : {}),
           ...(options.headers || {}),
         },
       });
 
+      if (response.status === 401) {
+        clearSessionState();
+        showAuthScreen();
+        throw new Error("Unauthorized");
+      }
+
       if (!response.ok) {
-        throw new Error(`Request failed with status ${response.status}`);
+        const data = await response.json().catch(() => ({}));
+        throw new Error(data.error || `Request failed with status ${response.status}`);
       }
 
       return response.json();
     }
 
-    async function openNote(noteId) {
-      if (!passcode) {
+    async function hydrateSession() {
+      if (!sessionToken) {
+        showAuthScreen();
         return;
       }
 
+      try {
+        const data = await fetchJson("/api/auth/me");
+        currentUser = data.user;
+        userChip.textContent = `Signed in as ${currentUser.username}`;
+        showApp();
+        connect();
+      } catch (_error) {
+        clearSessionState();
+        showAuthScreen();
+      }
+    }
+
+    async function openNote(noteId) {
       const data = await fetchJson(`/api/notes/${noteId}`);
       setActiveNote(data.note);
     }
 
+    async function shareNoteById(noteId) {
+      const username = await openTextModal({
+        title: "Share Note",
+        message: "Enter the username you want to share with.",
+        confirmLabel: "Next",
+      });
+
+      if (!username) {
+        return;
+      }
+
+      const roleInput = await openTextModal({
+        title: "Access Level",
+        message: "Type viewer or editor.",
+        value: "viewer",
+        confirmLabel: "Share",
+      });
+
+      if (roleInput === null) {
+        return;
+      }
+
+      const role = roleInput.trim().toLowerCase();
+
+      if (role !== "viewer" && role !== "editor") {
+        alert("Role must be viewer or editor.");
+        return;
+      }
+
+      try {
+        await fetchJson(`/api/notes/${noteId}/share`, {
+          method: "POST",
+          body: JSON.stringify({ username, role }),
+        });
+
+        alert(`Shared with ${username} as ${role}.`);
+        await refreshNotesList();
+      } catch (error) {
+        alert(error.message || "Could not share the note.");
+      }
+    }
+
+    async function renameNoteById(noteId) {
+      const noteSummary = notes.find((note) => note.id === noteId);
+
+      if (!noteSummary || !canEditNoteRole(noteSummary.accessRole)) {
+        alert("You only have view access to this note.");
+        return;
+      }
+
+      const currentTitle =
+        noteSummary.title || "Untitled Note";
+      const nextTitle = await openTextModal({
+        title: "Rename Note",
+        message: "Choose a new name for this note.",
+        value: currentTitle,
+        confirmLabel: "Save",
+      });
+
+      if (nextTitle === null) {
+        return;
+      }
+
+      try {
+        const data = await fetchJson(`/api/notes/${noteId}`, {
+          method: "PATCH",
+          body: JSON.stringify({ title: nextTitle }),
+        });
+
+        upsertNoteSummary({
+          id: data.note.id,
+          title: data.note.title,
+          version: data.note.version,
+          updatedAt: data.note.updatedAt,
+        });
+
+        if (activeNoteId === noteId) {
+          setActiveNote(data.note);
+        } else {
+          renderNotes();
+        }
+      } catch (_error) {
+        alert("Could not rename the note.");
+      }
+    }
+
+    async function deleteNoteById(noteId) {
+      const noteSummary = notes.find((note) => note.id === noteId);
+
+      if (!noteSummary || noteSummary.accessRole !== "owner") {
+        alert("Only the owner can delete this note.");
+        return;
+      }
+
+      const noteTitle =
+        noteSummary.title || "this note";
+      const confirmed = await openConfirmModal({
+        title: "Delete Note",
+        message: `Delete "${noteTitle}"? This cannot be undone.`,
+        confirmLabel: "Delete",
+      });
+
+      if (!confirmed) {
+        return;
+      }
+
+      try {
+        await fetchJson(`/api/notes/${noteId}`, {
+          method: "DELETE",
+        });
+
+        removeNoteSummary(noteId);
+
+        if (activeNoteId === noteId) {
+          const nextNote = notes[0] || null;
+
+          if (nextNote) {
+            await openNote(nextNote.id);
+          } else {
+            setActiveNote(null);
+            renderNotes();
+          }
+        } else {
+          renderNotes();
+        }
+      } catch (_error) {
+        alert("Could not delete the note.");
+      }
+    }
+
     async function refreshNotesList() {
-      if (!passcode) {
+      if (!sessionToken) {
         return;
       }
 
@@ -596,7 +1534,7 @@
     }
 
     async function syncActiveNote() {
-      if (!passcode || !activeNoteId) {
+      if (!sessionToken || !activeNoteId) {
         return;
       }
 
@@ -609,11 +1547,21 @@
 
     function scheduleReconnect() {
       clearTimeout(reconnectTimeoutId);
-      reconnectTimeoutId = setTimeout(connect, 1000);
+      reconnectTimeoutId = setTimeout(() => {
+        if (sessionToken) {
+          connect();
+        }
+      }, 1000);
     }
 
     function flushPendingText() {
-      if (!isAuthenticated || !activeNoteId || !ws || ws.readyState !== WebSocket.OPEN) {
+      if (
+        !sessionToken ||
+        !activeNoteId ||
+        !canEditActiveNote() ||
+        !ws ||
+        ws.readyState !== WebSocket.OPEN
+      ) {
         return;
       }
 
@@ -633,29 +1581,23 @@
     }
 
     function connect() {
+      if (!sessionToken) {
+        return;
+      }
+
       const protocol = window.location.protocol === "https:" ? "wss:" : "ws:";
       ws = new WebSocket(`${protocol}//${window.location.host}`);
 
       ws.onopen = () => {
-        if (!passcode) {
-          passcode = prompt("Enter passcode:");
-
-          if (!passcode) {
-            alert("A passcode is required.");
-            ws.close();
-            return;
-          }
-        }
-
-        ws.send(JSON.stringify({ type: "auth", pass: passcode, clientId }));
+        ws.send(JSON.stringify({ type: "auth", token: sessionToken, clientId }));
       };
 
       ws.onmessage = (event) => {
         const data = JSON.parse(event.data);
 
         if (data.type === "init") {
-          isAuthenticated = true;
-          editor.contentEditable = "true";
+          currentUser = data.user;
+          userChip.textContent = `Signed in as ${currentUser.username}`;
           notes = data.notes || [];
           renderNotes();
           setActiveNote(data.activeNote);
@@ -665,6 +1607,26 @@
         if (data.type === "notes-list") {
           notes = data.notes || [];
           renderNotes();
+
+          if (activeNoteId && !notes.some((note) => note.id === activeNoteId)) {
+            const nextNote = notes[0] || null;
+
+            if (nextNote) {
+              openNote(nextNote.id);
+            } else {
+              setActiveNote(null);
+            }
+          } else if (activeNoteId) {
+            const activeSummary = getActiveNoteSummary();
+
+            if (activeSummary && activeSummary.accessRole !== activeNoteAccessRole) {
+              activeNoteAccessRole = activeSummary.accessRole || null;
+              syncActiveEditorAccess();
+              const roleSuffix = activeNoteAccessRole === "viewer" ? " - View only" : "";
+              activeNoteMeta.textContent = `Last updated ${formatUpdatedAt(activeSummary.updatedAt)}${roleSuffix}`;
+            }
+          }
+
           return;
         }
 
@@ -678,33 +1640,63 @@
           upsertNoteSummary(data.note);
 
           if (data.note.id === activeNoteId) {
+            const roleSuffix = activeNoteAccessRole === "viewer" ? " - View only" : "";
             activeNoteTitle.textContent = data.note.title;
-            activeNoteMeta.textContent = `Last updated ${formatUpdatedAt(data.note.updatedAt)}`;
+            activeNoteMeta.textContent = `Last updated ${formatUpdatedAt(data.note.updatedAt)}${roleSuffix}`;
           }
 
           renderNotes();
           return;
         }
 
+        if (data.type === "note-deleted") {
+          const deletedNoteId = data.noteId || data.note?.id;
+
+          if (!deletedNoteId) {
+            return;
+          }
+
+          removeNoteSummary(deletedNoteId);
+
+          if (deletedNoteId === activeNoteId) {
+            const nextNote = notes[0] || null;
+            if (nextNote) {
+              openNote(nextNote.id);
+            } else {
+              setActiveNote(null);
+            }
+          } else {
+            renderNotes();
+          }
+
+          return;
+        }
+
         if (data.type === "note-update") {
+          const existingNote = notes.find((note) => note.id === data.noteId);
+
           upsertNoteSummary({
             id: data.noteId,
-            title: notes.find((note) => note.id === data.noteId)?.title || "Untitled Note",
+            title: existingNote?.title || "Untitled Note",
             version: data.version,
             updatedAt: data.updatedAt,
+            accessRole: existingNote?.accessRole || "owner",
+            isOwner: existingNote?.isOwner ?? true,
           });
 
           if (data.noteId === activeNoteId) {
             if (data.sourceClientId === clientId) {
               activeNoteVersion = data.version || activeNoteVersion;
-              activeNoteMeta.textContent = `Last updated ${formatUpdatedAt(data.updatedAt)}`;
+              const roleSuffix = activeNoteAccessRole === "viewer" ? " - View only" : "";
+              activeNoteMeta.textContent = `Last updated ${formatUpdatedAt(data.updatedAt)}${roleSuffix}`;
               renderNotes();
               return;
             }
 
             if ((data.version || 0) > activeNoteVersion) {
               activeNoteVersion = data.version || 0;
-              activeNoteMeta.textContent = `Last updated ${formatUpdatedAt(data.updatedAt)}`;
+              const roleSuffix = activeNoteAccessRole === "viewer" ? " - View only" : "";
+              activeNoteMeta.textContent = `Last updated ${formatUpdatedAt(data.updatedAt)}${roleSuffix}`;
               setEditorMarkup(data.text || "");
               updateFormattingButtons();
             }
@@ -714,16 +1706,34 @@
           return;
         }
 
+        if (data.type === "note-access-revoked") {
+          removeNoteSummary(data.noteId);
+
+          if (activeNoteId === data.noteId) {
+            const nextNote = notes[0] || null;
+
+            if (nextNote) {
+              openNote(nextNote.id);
+            } else {
+              setActiveNote(null);
+            }
+          } else {
+            renderNotes();
+          }
+
+          return;
+        }
+
         if (data.type === "auth-error") {
-          alert("Incorrect passcode.");
-          passcode = "";
-          ws.close();
+          clearSessionState();
+          showAuthScreen();
         }
       };
 
       ws.onclose = () => {
         editor.contentEditable = "false";
-        isAuthenticated = false;
+        boldToggle.disabled = true;
+        underlineToggle.disabled = true;
         scheduleReconnect();
       };
 
@@ -732,8 +1742,38 @@
       };
     }
 
+    authForm.addEventListener("submit", async (event) => {
+      event.preventDefault();
+      authError.textContent = "";
+
+      const username = usernameInput.value.trim();
+      const password = passwordInput.value;
+      const endpoint =
+        authMode === "login" ? "/api/auth/login" : "/api/auth/register";
+
+      try {
+        const data = await fetchJson(endpoint, {
+          method: "POST",
+          body: JSON.stringify({ username, password }),
+        });
+
+        saveSession(data.token);
+        currentUser = data.user;
+        userChip.textContent = `Signed in as ${currentUser.username}`;
+        passwordInput.value = "";
+        showApp();
+        connect();
+      } catch (error) {
+        authError.textContent = error.message;
+      }
+    });
+
+    authToggle.addEventListener("click", () => {
+      setAuthMode(authMode === "login" ? "register" : "login");
+    });
+
     editor.addEventListener("input", () => {
-      if (!isAuthenticated || !activeNoteId) {
+      if (!sessionToken || !activeNoteId || !canEditActiveNote()) {
         return;
       }
 
@@ -744,6 +1784,27 @@
     editor.addEventListener("keyup", updateFormattingButtons);
     editor.addEventListener("mouseup", updateFormattingButtons);
     editor.addEventListener("focus", updateFormattingButtons);
+    editor.addEventListener("paste", (event) => {
+      if (!canEditActiveNote()) {
+        return;
+      }
+
+      event.preventDefault();
+
+      const text = event.clipboardData?.getData("text/plain") || "";
+      insertHtmlAtCursor(plainTextToHtml(text));
+      queueSend();
+      updateFormattingButtons();
+    });
+
+    editor.addEventListener("wheel", (event) => {
+      if (!event.ctrlKey) {
+        return;
+      }
+
+      event.preventDefault();
+      adjustEditorFontSize(event.deltaY < 0 ? 1 : -1);
+    }, { passive: false });
 
     themeSelect.addEventListener("change", () => {
       preferences.theme = themeSelect.value;
@@ -758,7 +1819,7 @@
     });
 
     boldToggle.addEventListener("click", () => {
-      if (!activeNoteId) {
+      if (!activeNoteId || !canEditActiveNote()) {
         return;
       }
 
@@ -769,7 +1830,7 @@
     });
 
     underlineToggle.addEventListener("click", () => {
-      if (!activeNoteId) {
+      if (!activeNoteId || !canEditActiveNote()) {
         return;
       }
 
@@ -780,11 +1841,11 @@
     });
 
     newNoteButton.addEventListener("click", async () => {
-      if (!passcode) {
-        return;
-      }
-
-      const title = prompt("Name your new note:");
+      const title = await openTextModal({
+        title: "New Note",
+        message: "Give your new note a name.",
+        confirmLabel: "Create",
+      });
 
       if (!title) {
         return;
@@ -808,34 +1869,60 @@
       }
     });
 
-    renameNoteButton.addEventListener("click", async () => {
-      if (!activeNoteId || !passcode) {
+    settingsButton.addEventListener("click", () => {
+      if (!currentUser) {
         return;
       }
 
-      const currentTitle = notes.find((note) => note.id === activeNoteId)?.title || activeNoteTitle.textContent;
-      const nextTitle = prompt("Rename note:", currentTitle);
+      openSettingsModal();
+    });
 
-      if (nextTitle === null) {
-        return;
+    settingsCancel.addEventListener("click", () => {
+      closeSettingsModal();
+    });
+
+    settingsBackdrop.addEventListener("click", (event) => {
+      if (event.target === settingsBackdrop) {
+        closeSettingsModal();
       }
+    });
+
+    document.addEventListener("click", (event) => {
+      if (!event.target.closest(".note-menu-wrap")) {
+        document.querySelectorAll(".note-menu").forEach((entry) => {
+          entry.hidden = true;
+        });
+        document.querySelectorAll(".note-menu-button").forEach((entry) => {
+          entry.setAttribute("aria-expanded", "false");
+        });
+      }
+    });
+
+    settingsForm.addEventListener("submit", async (event) => {
+      event.preventDefault();
+      settingsError.textContent = "";
 
       try {
-        const data = await fetchJson(`/api/notes/${activeNoteId}`, {
-          method: "PATCH",
-          body: JSON.stringify({ title: nextTitle }),
+        const data = await fetchJson("/api/auth/change-password", {
+          method: "POST",
+          body: JSON.stringify({
+            currentPassword: currentPasswordInput.value,
+            newPassword: newPasswordInput.value,
+          }),
         });
 
-        upsertNoteSummary({
-          id: data.note.id,
-          title: data.note.title,
-          version: data.note.version,
-          updatedAt: data.note.updatedAt,
-        });
-        setActiveNote(data.note);
-      } catch (_error) {
-        alert("Could not rename the note.");
+        saveSession(data.token);
+        currentUser = data.user;
+        userChip.textContent = `Signed in as ${currentUser.username}`;
+        closeSettingsModal();
+      } catch (error) {
+        settingsError.textContent = error.message;
       }
+    });
+
+    logoutButton.addEventListener("click", () => {
+      clearSessionState();
+      showAuthScreen();
     });
 
     syncIntervalId = setInterval(() => {
@@ -853,8 +1940,15 @@
     });
 
     loadPreferences();
-    setEmptyState(true);
-    connect();
+    setAuthMode("login");
+    setActiveNote(null);
+    hydrateSession();
+
+    if ("serviceWorker" in navigator) {
+      window.addEventListener("load", () => {
+        navigator.serviceWorker.register("/service-worker.js").catch(() => {});
+      });
+    }
     </script>
   </body>
 </html>
