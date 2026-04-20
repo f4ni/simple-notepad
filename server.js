@@ -36,6 +36,7 @@ app.get("/", (_req, res) => {
 
 let notesCache = new Map();
 let usersCache = new Map();
+let notePermissionsCache = new Map();
 let wss;
 let updateChain = Promise.resolve();
 
@@ -158,28 +159,78 @@ function ensureAuthorized(req, res, next) {
   next();
 }
 
-function makeNoteSummary(note) {
+function isValidPermissionRole(role) {
+  return role === "viewer" || role === "editor";
+}
+
+function isEditableRole(role) {
+  return role === "owner" || role === "editor";
+}
+
+function getNotePermissionMap(noteId) {
+  if (!notePermissionsCache.has(noteId)) {
+    notePermissionsCache.set(noteId, new Map());
+  }
+
+  return notePermissionsCache.get(noteId);
+}
+
+function getNoteAccessRole(note, userId) {
+  if (!note || !userId) {
+    return null;
+  }
+
+  if (note.owner_id === userId) {
+    return "owner";
+  }
+
+  return getNotePermissionMap(note.id).get(userId) || null;
+}
+
+function getAccessibleUserIdsForNote(note) {
+  const users = new Set();
+
+  if (note?.owner_id) {
+    users.add(note.owner_id);
+  }
+
+  getNotePermissionMap(note.id).forEach((_role, userId) => {
+    users.add(userId);
+  });
+
+  return Array.from(users);
+}
+
+function makeNoteSummary(note, userId) {
+  const accessRole = getNoteAccessRole(note, userId);
+
   return {
     id: note.id,
     title: note.title,
     version: note.version,
     updatedAt: note.updated_at,
+    accessRole,
+    isOwner: accessRole === "owner",
   };
 }
 
 function getUserNotes(userId) {
   return Array.from(notesCache.values())
-    .filter((note) => note.owner_id === userId)
+    .filter((note) => Boolean(getNoteAccessRole(note, userId)))
     .sort((left, right) => {
       return new Date(right.updated_at).getTime() - new Date(left.updated_at).getTime();
     });
 }
 
 function getUserNoteSummaries(userId) {
-  return getUserNotes(userId).map(makeNoteSummary);
+  return getUserNotes(userId).map((note) => makeNoteSummary(note, userId));
 }
 
 function broadcastToUser(userId, payload) {
+  if (!wss) {
+    return;
+  }
+
   wss.clients.forEach((client) => {
     if (
       client.readyState === WebSocket.OPEN &&
@@ -191,10 +242,22 @@ function broadcastToUser(userId, payload) {
   });
 }
 
+function broadcastToUsers(userIds, payload) {
+  userIds.forEach((userId) => {
+    broadcastToUser(userId, payload);
+  });
+}
+
 function broadcastNotesList(userId) {
   broadcastToUser(userId, {
     type: "notes-list",
     notes: getUserNoteSummaries(userId),
+  });
+}
+
+function broadcastNotesListsForUsers(userIds) {
+  userIds.forEach((userId) => {
+    broadcastNotesList(userId);
   });
 }
 
@@ -214,6 +277,23 @@ async function refreshNotesCache() {
   `);
 
   notesCache = new Map(result.rows.map((row) => [row.id, row]));
+}
+
+async function refreshNotePermissionsCache() {
+  const result = await pool.query(`
+    SELECT note_id, user_id, role
+    FROM note_permissions
+  `);
+
+  notePermissionsCache = new Map();
+
+  result.rows.forEach((row) => {
+    if (!notePermissionsCache.has(row.note_id)) {
+      notePermissionsCache.set(row.note_id, new Map());
+    }
+
+    notePermissionsCache.get(row.note_id).set(row.user_id, row.role);
+  });
 }
 
 async function initializeStorage() {
@@ -250,6 +330,17 @@ async function initializeStorage() {
   `);
 
   await pool.query(`
+    CREATE TABLE IF NOT EXISTS note_permissions (
+      note_id UUID REFERENCES notes(id) ON DELETE CASCADE,
+      user_id UUID REFERENCES users(id) ON DELETE CASCADE,
+      role TEXT NOT NULL CHECK (role IN ('viewer', 'editor')),
+      granted_by UUID REFERENCES users(id) ON DELETE SET NULL,
+      created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+      PRIMARY KEY (note_id, user_id)
+    )
+  `);
+
+  await pool.query(`
     CREATE TABLE IF NOT EXISTS shared_note (
       id INTEGER PRIMARY KEY CHECK (id = 1),
       content TEXT NOT NULL DEFAULT '',
@@ -279,6 +370,7 @@ async function initializeStorage() {
 
   await refreshUsersCache();
   await refreshNotesCache();
+  await refreshNotePermissionsCache();
 }
 
 async function getUserByUsername(username) {
@@ -375,6 +467,16 @@ async function createNote(ownerId, title, content = "") {
 function getNoteByIdForUser(noteId, userId) {
   const note = notesCache.get(noteId) || null;
 
+  if (!note || !getNoteAccessRole(note, userId)) {
+    return null;
+  }
+
+  return note;
+}
+
+function getOwnedNoteByIdForUser(noteId, userId) {
+  const note = notesCache.get(noteId) || null;
+
   if (!note || note.owner_id !== userId) {
     return null;
   }
@@ -382,15 +484,28 @@ function getNoteByIdForUser(noteId, userId) {
   return note;
 }
 
-async function saveNoteContent(noteId, ownerId, nextText) {
+function getNoteAccessForUser(noteId, userId) {
+  const note = notesCache.get(noteId) || null;
+
+  if (!note) {
+    return { note: null, accessRole: null };
+  }
+
+  return {
+    note,
+    accessRole: getNoteAccessRole(note, userId),
+  };
+}
+
+async function saveNoteContent(noteId, nextText) {
   const result = await pool.query(
     `
       UPDATE notes
       SET content = $1, version = version + 1, updated_at = NOW()
-      WHERE id = $2 AND owner_id = $3
+      WHERE id = $2
       RETURNING id, owner_id, title, content, version, updated_at
     `,
-    [nextText, noteId, ownerId]
+    [nextText, noteId]
   );
 
   const note = result.rows[0] || null;
@@ -402,7 +517,7 @@ async function saveNoteContent(noteId, ownerId, nextText) {
   return note;
 }
 
-async function renameNote(noteId, ownerId, nextTitle) {
+async function renameNote(noteId, nextTitle) {
   const trimmedTitle = typeof nextTitle === "string" ? nextTitle.trim() : "";
   const safeTitle = trimmedTitle || "Untitled Note";
 
@@ -410,10 +525,10 @@ async function renameNote(noteId, ownerId, nextTitle) {
     `
       UPDATE notes
       SET title = $1, updated_at = NOW()
-      WHERE id = $2 AND owner_id = $3
+      WHERE id = $2
       RETURNING id, owner_id, title, content, version, updated_at
     `,
-    [safeTitle, noteId, ownerId]
+    [safeTitle, noteId]
   );
 
   const note = result.rows[0] || null;
@@ -425,35 +540,104 @@ async function renameNote(noteId, ownerId, nextTitle) {
   return note;
 }
 
-async function deleteNote(noteId, ownerId) {
+async function deleteNote(noteId) {
   const result = await pool.query(
     `
       DELETE FROM notes
-      WHERE id = $1 AND owner_id = $2
+      WHERE id = $1
       RETURNING id, owner_id, title, content, version, updated_at
     `,
-    [noteId, ownerId]
+    [noteId]
   );
 
   const note = result.rows[0] || null;
 
   if (note) {
     notesCache.delete(note.id);
+    notePermissionsCache.delete(note.id);
   }
 
   return note;
 }
 
-function enqueueNoteUpdate(noteId, ownerId, nextText, sourceClientId) {
+async function grantNotePermission(noteId, userId, role, grantedByUserId) {
+  if (!isValidPermissionRole(role)) {
+    return null;
+  }
+
+  const result = await pool.query(
+    `
+      INSERT INTO note_permissions (note_id, user_id, role, granted_by)
+      VALUES ($1, $2, $3, $4)
+      ON CONFLICT (note_id, user_id)
+      DO UPDATE SET role = EXCLUDED.role, granted_by = EXCLUDED.granted_by
+      RETURNING note_id, user_id, role
+    `,
+    [noteId, userId, role, grantedByUserId]
+  );
+
+  const permission = result.rows[0] || null;
+
+  if (permission) {
+    getNotePermissionMap(permission.note_id).set(permission.user_id, permission.role);
+  }
+
+  return permission;
+}
+
+async function revokeNotePermission(noteId, userId) {
+  const result = await pool.query(
+    `
+      DELETE FROM note_permissions
+      WHERE note_id = $1 AND user_id = $2
+      RETURNING note_id, user_id
+    `,
+    [noteId, userId]
+  );
+
+  const deleted = result.rows[0] || null;
+
+  if (deleted) {
+    getNotePermissionMap(noteId).delete(userId);
+  }
+
+  return deleted;
+}
+
+function getCollaboratorsForNote(note) {
+  const collaborators = [];
+
+  getNotePermissionMap(note.id).forEach((role, userId) => {
+    const user = usersCache.get(userId);
+
+    if (!user) {
+      return;
+    }
+
+    collaborators.push({
+      userId: user.id,
+      username: user.username,
+      role,
+    });
+  });
+
+  return collaborators.sort((left, right) => {
+    return left.username.localeCompare(right.username);
+  });
+}
+
+function enqueueNoteUpdate(noteId, nextText, sourceClientId) {
   updateChain = updateChain
     .then(async () => {
-      const note = await saveNoteContent(noteId, ownerId, nextText);
+      const note = await saveNoteContent(noteId, nextText);
 
       if (!note) {
         return;
       }
 
-      broadcastToUser(ownerId, {
+      const userIds = getAccessibleUserIdsForNote(note);
+
+      broadcastToUsers(userIds, {
         type: "note-update",
         noteId: note.id,
         text: note.content,
@@ -462,7 +646,7 @@ function enqueueNoteUpdate(noteId, ownerId, nextText, sourceClientId) {
         sourceClientId: sourceClientId || null,
       });
 
-      broadcastNotesList(ownerId);
+      broadcastNotesListsForUsers(userIds);
     })
     .catch((error) => {
       console.error("Failed to persist update:", error);
@@ -586,9 +770,9 @@ function attachNoteRoutes() {
   });
 
   app.get("/api/notes/:id", ensureAuthorized, (req, res) => {
-    const note = getNoteByIdForUser(req.params.id, req.user.id);
+    const { note, accessRole } = getNoteAccessForUser(req.params.id, req.user.id);
 
-    if (!note) {
+    if (!note || !accessRole) {
       res.status(404).json({ error: "Note not found" });
       return;
     }
@@ -600,6 +784,8 @@ function attachNoteRoutes() {
         text: note.content,
         version: note.version,
         updatedAt: note.updated_at,
+        accessRole,
+        isOwner: accessRole === "owner",
       },
     });
   });
@@ -611,7 +797,7 @@ function attachNoteRoutes() {
 
       broadcastToUser(req.user.id, {
         type: "note-created",
-        note: makeNoteSummary(note),
+        note: makeNoteSummary(note, req.user.id),
       });
       broadcastNotesList(req.user.id);
 
@@ -622,6 +808,8 @@ function attachNoteRoutes() {
           text: note.content,
           version: note.version,
           updatedAt: note.updated_at,
+          accessRole: "owner",
+          isOwner: true,
         },
       });
     } catch (error) {
@@ -632,19 +820,38 @@ function attachNoteRoutes() {
 
   app.patch("/api/notes/:id", ensureAuthorized, async (req, res) => {
     try {
+      const { note: existingNote, accessRole } = getNoteAccessForUser(req.params.id, req.user.id);
+
+      if (!existingNote || !accessRole) {
+        res.status(404).json({ error: "Note not found" });
+        return;
+      }
+
+      if (!isEditableRole(accessRole)) {
+        res.status(403).json({ error: "You only have view access to this note." });
+        return;
+      }
+
       const title = typeof req.body?.title === "string" ? req.body.title : "";
-      const note = await renameNote(req.params.id, req.user.id, title);
+      const note = await renameNote(req.params.id, title);
 
       if (!note) {
         res.status(404).json({ error: "Note not found" });
         return;
       }
 
-      broadcastToUser(req.user.id, {
+      const accessibleUsers = getAccessibleUserIdsForNote(note);
+
+      broadcastToUsers(accessibleUsers, {
         type: "note-renamed",
-        note: makeNoteSummary(note),
+        note: {
+          id: note.id,
+          title: note.title,
+          version: note.version,
+          updatedAt: note.updated_at,
+        },
       });
-      broadcastNotesList(req.user.id);
+      broadcastNotesListsForUsers(accessibleUsers);
 
       res.json({
         note: {
@@ -653,6 +860,8 @@ function attachNoteRoutes() {
           text: note.content,
           version: note.version,
           updatedAt: note.updated_at,
+          accessRole,
+          isOwner: accessRole === "owner",
         },
       });
     } catch (error) {
@@ -661,20 +870,130 @@ function attachNoteRoutes() {
     }
   });
 
-  app.delete("/api/notes/:id", ensureAuthorized, async (req, res) => {
+  app.get("/api/notes/:id/shares", ensureAuthorized, (req, res) => {
+    const note = getOwnedNoteByIdForUser(req.params.id, req.user.id);
+
+    if (!note) {
+      res.status(404).json({ error: "Note not found" });
+      return;
+    }
+
+    res.json({
+      collaborators: getCollaboratorsForNote(note),
+    });
+  });
+
+  app.post("/api/notes/:id/share", ensureAuthorized, async (req, res) => {
     try {
-      const note = await deleteNote(req.params.id, req.user.id);
+      const note = getOwnedNoteByIdForUser(req.params.id, req.user.id);
 
       if (!note) {
         res.status(404).json({ error: "Note not found" });
         return;
       }
 
-      broadcastToUser(req.user.id, {
-        type: "note-deleted",
-        note: makeNoteSummary(note),
+      const username = typeof req.body?.username === "string" ? req.body.username : "";
+      const role = typeof req.body?.role === "string" ? req.body.role.trim().toLowerCase() : "";
+
+      if (!username.trim()) {
+        res.status(400).json({ error: "Username is required." });
+        return;
+      }
+
+      if (!isValidPermissionRole(role)) {
+        res.status(400).json({ error: "Role must be viewer or editor." });
+        return;
+      }
+
+      const targetUser = await getUserByUsername(username);
+
+      if (!targetUser) {
+        res.status(404).json({ error: "User not found." });
+        return;
+      }
+
+      if (targetUser.id === req.user.id) {
+        res.status(400).json({ error: "You already own this note." });
+        return;
+      }
+
+      const permission = await grantNotePermission(note.id, targetUser.id, role, req.user.id);
+
+      if (!permission) {
+        res.status(500).json({ error: "Could not update sharing permissions." });
+        return;
+      }
+
+      const accessibleUsers = getAccessibleUserIdsForNote(note);
+      broadcastNotesListsForUsers(accessibleUsers);
+
+      res.status(201).json({
+        shared: true,
+        collaborator: {
+          userId: targetUser.id,
+          username: targetUser.username,
+          role,
+        },
       });
-      broadcastNotesList(req.user.id);
+    } catch (error) {
+      console.error("Failed to share note:", error);
+      res.status(500).json({ error: "Could not share note." });
+    }
+  });
+
+  app.delete("/api/notes/:id/share/:userId", ensureAuthorized, async (req, res) => {
+    try {
+      const note = getOwnedNoteByIdForUser(req.params.id, req.user.id);
+
+      if (!note) {
+        res.status(404).json({ error: "Note not found" });
+        return;
+      }
+
+      if (req.params.userId === req.user.id) {
+        res.status(400).json({ error: "Owner access cannot be revoked." });
+        return;
+      }
+
+      const removed = await revokeNotePermission(note.id, req.params.userId);
+
+      if (!removed) {
+        res.status(404).json({ error: "Collaborator not found." });
+        return;
+      }
+
+      broadcastToUser(req.params.userId, {
+        type: "note-access-revoked",
+        noteId: note.id,
+      });
+
+      const accessibleUsers = getAccessibleUserIdsForNote(note);
+      broadcastNotesListsForUsers([...accessibleUsers, req.params.userId]);
+
+      res.json({ removed: true });
+    } catch (error) {
+      console.error("Failed to revoke note access:", error);
+      res.status(500).json({ error: "Could not revoke note access." });
+    }
+  });
+
+  app.delete("/api/notes/:id", ensureAuthorized, async (req, res) => {
+    try {
+      const note = getOwnedNoteByIdForUser(req.params.id, req.user.id);
+
+      if (!note) {
+        res.status(404).json({ error: "Note not found" });
+        return;
+      }
+
+      const accessibleUsers = getAccessibleUserIdsForNote(note);
+      await deleteNote(req.params.id);
+
+      broadcastToUsers(accessibleUsers, {
+        type: "note-deleted",
+        noteId: note.id,
+      });
+      broadcastNotesListsForUsers(accessibleUsers);
 
       res.json({
         deleted: true,
@@ -715,6 +1034,7 @@ function attachWebSocketServer(server) {
 
           const notes = getUserNoteSummaries(user.id);
           const firstNote = notes[0] ? getNoteByIdForUser(notes[0].id, user.id) : null;
+          const firstNoteRole = firstNote ? getNoteAccessRole(firstNote, user.id) : null;
 
           ws.send(
             JSON.stringify({
@@ -731,6 +1051,8 @@ function attachWebSocketServer(server) {
                     text: firstNote.content,
                     version: firstNote.version,
                     updatedAt: firstNote.updated_at,
+                    accessRole: firstNoteRole,
+                    isOwner: firstNoteRole === "owner",
                   }
                 : null,
             })
@@ -746,12 +1068,13 @@ function attachWebSocketServer(server) {
         if (data.type === "update-note") {
           const noteId = typeof data.noteId === "string" ? data.noteId : "";
           const nextText = typeof data.text === "string" ? data.text : "";
+          const { note, accessRole } = getNoteAccessForUser(noteId, ws.userId);
 
-          if (!getNoteByIdForUser(noteId, ws.userId)) {
+          if (!note || !accessRole || !isEditableRole(accessRole)) {
             return;
           }
 
-          await enqueueNoteUpdate(noteId, ws.userId, nextText, ws.clientId);
+          await enqueueNoteUpdate(noteId, nextText, ws.clientId);
         }
       } catch (error) {
         console.error("Error:", error);

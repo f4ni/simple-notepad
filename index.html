@@ -38,8 +38,8 @@
 
       body {
         margin: 0;
-        min-height: 100vh;
-        height: 100vh;
+        min-height: 100dvh;
+        height: 100dvh;
         overflow: hidden;
         font-family: "Segoe UI", Arial, sans-serif;
         background:
@@ -214,7 +214,7 @@
       .app-shell {
         display: grid;
         grid-template-columns: 280px 1fr;
-        height: 100vh;
+        height: 100dvh;
         overflow: hidden;
       }
 
@@ -544,13 +544,55 @@
       }
 
       @media (max-width: 900px) {
+        body {
+          height: auto;
+          min-height: 100dvh;
+          overflow: auto;
+        }
+
         .app-shell {
           grid-template-columns: 1fr;
+          grid-template-rows: auto 1fr;
+          min-height: 100dvh;
+          height: auto;
         }
 
         .sidebar {
           border-right: 0;
           border-bottom: 1px solid var(--border-color);
+          max-height: 38dvh;
+          padding: 12px;
+        }
+
+        .toolbar {
+          gap: 8px;
+          padding: 10px 12px;
+        }
+
+        .note-heading {
+          min-width: 0;
+          width: 100%;
+          margin-right: 0;
+        }
+
+        .editor {
+          padding: 14px;
+          font-size: 16px;
+        }
+      }
+
+      @media (max-width: 560px) {
+        .auth-screen {
+          padding: 12px;
+        }
+
+        .auth-card {
+          border-radius: 14px;
+          padding: 18px;
+        }
+
+        .sidebar {
+          max-height: 42dvh;
         }
       }
     </style>
@@ -710,6 +752,7 @@
     let notes = [];
     let activeNoteId = null;
     let activeNoteVersion = 0;
+    let activeNoteAccessRole = null;
     let sessionToken = localStorage.getItem(SESSION_KEY) || "";
     let currentUser = null;
     let authMode = "login";
@@ -781,6 +824,25 @@
     function updateFormattingButtons() {
       boldToggle.classList.toggle("active", document.queryCommandState("bold"));
       underlineToggle.classList.toggle("active", document.queryCommandState("underline"));
+    }
+
+    function canEditNoteRole(accessRole) {
+      return accessRole === "owner" || accessRole === "editor";
+    }
+
+    function canEditActiveNote() {
+      return canEditNoteRole(activeNoteAccessRole);
+    }
+
+    function getActiveNoteSummary() {
+      return notes.find((note) => note.id === activeNoteId) || null;
+    }
+
+    function syncActiveEditorAccess() {
+      const canEdit = Boolean(sessionToken && activeNoteId && canEditActiveNote());
+      editor.contentEditable = canEdit ? "true" : "false";
+      boldToggle.disabled = !canEdit;
+      underlineToggle.disabled = !canEdit;
     }
 
     function getReadableTextColor(backgroundColor) {
@@ -1045,61 +1107,26 @@
       return new Date(updatedAt).toLocaleString();
     }
 
-    function renderNotes() {
-      noteList.innerHTML = "";
-
-      notes.forEach((note) => {
-        const button = document.createElement("button");
-        button.type = "button";
-        button.className = "note-item";
-
-        if (note.id === activeNoteId) {
-          button.classList.add("active");
-        }
-
-        button.innerHTML = `
-          <div class="note-item-content">
-            <span class="note-item-title">${note.title}</span>
-            <span class="note-item-meta">${formatUpdatedAt(note.updatedAt)}</span>
-          </div>
-          <div class="note-actions">
-            <button class="note-action-button" type="button" data-action="rename" aria-label="Rename note" title="Rename">✎</button>
-            <button class="note-action-button" type="button" data-action="delete" aria-label="Delete note" title="Delete">×</button>
-          </div>
-        `;
-
-        button.addEventListener("click", () => {
-          openNote(note.id);
-        });
-
-        const renameButton = button.querySelector('[data-action="rename"]');
-        const deleteButton = button.querySelector('[data-action="delete"]');
-
-        renameButton.addEventListener("click", async (event) => {
-          event.stopPropagation();
-          await renameNoteById(note.id);
-        });
-
-        deleteButton.addEventListener("click", async (event) => {
-          event.stopPropagation();
-          await deleteNoteById(note.id);
-        });
-
-        noteList.appendChild(button);
-      });
-    }
 
     function setEmptyState(isEmpty) {
       emptyState.hidden = !isEmpty;
       editor.hidden = isEmpty;
-      editor.contentEditable =
-        isEmpty || !sessionToken || !activeNoteId ? "false" : "true";
+
+      if (isEmpty) {
+        editor.contentEditable = "false";
+        boldToggle.disabled = true;
+        underlineToggle.disabled = true;
+        return;
+      }
+
+      syncActiveEditorAccess();
     }
 
     function setActiveNote(note) {
       if (!note) {
         activeNoteId = null;
         activeNoteVersion = 0;
+        activeNoteAccessRole = null;
         activeNoteTitle.textContent = "No note selected";
         activeNoteMeta.textContent = "Create your first private note from the sidebar.";
         setEditorMarkup("");
@@ -1110,11 +1137,13 @@
 
       activeNoteId = note.id;
       activeNoteVersion = note.version || 0;
+      activeNoteAccessRole = note.accessRole || null;
       activeNoteTitle.textContent = note.title;
-      activeNoteMeta.textContent = `Last updated ${formatUpdatedAt(note.updatedAt)}`;
+      const roleLabel = note.accessRole === "viewer" ? " - View only" : "";
+      activeNoteMeta.textContent = `Last updated ${formatUpdatedAt(note.updatedAt)}${roleLabel}`;
       setEditorMarkup(note.text || "");
       setEmptyState(false);
-      editor.contentEditable = sessionToken ? "true" : "false";
+      syncActiveEditorAccess();
       renderNotes();
       updateFormattingButtons();
     }
@@ -1143,6 +1172,7 @@
       notes = [];
       activeNoteId = null;
       activeNoteVersion = 0;
+      activeNoteAccessRole = null;
       userChip.textContent = "";
       closeSettingsModal();
       setActiveNote(null);
@@ -1230,6 +1260,17 @@
       noteList.innerHTML = "";
 
       notes.forEach((note) => {
+        const canEdit = canEditNoteRole(note.accessRole);
+        const canDelete = note.accessRole === "owner";
+        const canShare = note.accessRole === "owner";
+        const hasMenuActions = canEdit || canDelete || canShare;
+        const roleSuffix = note.accessRole === "viewer" ? " - View only" : "";
+        const menuActions = [
+          canShare ? '<button type="button" data-action="share">Share</button>' : "",
+          canEdit ? '<button type="button" data-action="rename">Edit</button>' : "",
+          canDelete ? '<button type="button" data-action="delete">Delete</button>' : "",
+        ].join("");
+
         const button = document.createElement("button");
         button.type = "button";
         button.className = "note-item";
@@ -1241,13 +1282,12 @@
         button.innerHTML = `
           <div class="note-item-content">
             <span class="note-item-title">${note.title}</span>
-            <span class="note-item-meta">${formatUpdatedAt(note.updatedAt)}</span>
+            <span class="note-item-meta">${formatUpdatedAt(note.updatedAt)}${roleSuffix}</span>
           </div>
           <div class="note-menu-wrap">
-            <button class="note-menu-button" type="button" aria-label="Note actions" aria-expanded="false" title="More">&#8942;</button>
+            <button class="note-menu-button" type="button" aria-label="Note actions" aria-expanded="false" title="More" ${hasMenuActions ? "" : "hidden"}>&#8942;</button>
             <div class="note-menu" hidden>
-              <button type="button" data-action="rename">Edit</button>
-              <button type="button" data-action="delete">Delete</button>
+              ${menuActions}
             </div>
           </div>
         `;
@@ -1258,6 +1298,7 @@
 
         const menuButton = button.querySelector(".note-menu-button");
         const menu = button.querySelector(".note-menu");
+        const shareButton = button.querySelector('[data-action="share"]');
         const renameButton = button.querySelector('[data-action="rename"]');
         const deleteButton = button.querySelector('[data-action="delete"]');
 
@@ -1274,19 +1315,32 @@
           menuButton.setAttribute("aria-expanded", shouldOpen ? "true" : "false");
         });
 
-        renameButton.addEventListener("click", async (event) => {
-          event.stopPropagation();
-          menu.hidden = true;
-          menuButton.setAttribute("aria-expanded", "false");
-          await renameNoteById(note.id);
-        });
+        if (shareButton) {
+          shareButton.addEventListener("click", async (event) => {
+            event.stopPropagation();
+            menu.hidden = true;
+            menuButton.setAttribute("aria-expanded", "false");
+            await shareNoteById(note.id);
+          });
+        }
 
-        deleteButton.addEventListener("click", async (event) => {
-          event.stopPropagation();
-          menu.hidden = true;
-          menuButton.setAttribute("aria-expanded", "false");
-          await deleteNoteById(note.id);
-        });
+        if (renameButton) {
+          renameButton.addEventListener("click", async (event) => {
+            event.stopPropagation();
+            menu.hidden = true;
+            menuButton.setAttribute("aria-expanded", "false");
+            await renameNoteById(note.id);
+          });
+        }
+
+        if (deleteButton) {
+          deleteButton.addEventListener("click", async (event) => {
+            event.stopPropagation();
+            menu.hidden = true;
+            menuButton.setAttribute("aria-expanded", "false");
+            await deleteNoteById(note.id);
+          });
+        }
 
         noteList.appendChild(button);
       });
@@ -1339,9 +1393,58 @@
       setActiveNote(data.note);
     }
 
+    async function shareNoteById(noteId) {
+      const username = await openTextModal({
+        title: "Share Note",
+        message: "Enter the username you want to share with.",
+        confirmLabel: "Next",
+      });
+
+      if (!username) {
+        return;
+      }
+
+      const roleInput = await openTextModal({
+        title: "Access Level",
+        message: "Type viewer or editor.",
+        value: "viewer",
+        confirmLabel: "Share",
+      });
+
+      if (roleInput === null) {
+        return;
+      }
+
+      const role = roleInput.trim().toLowerCase();
+
+      if (role !== "viewer" && role !== "editor") {
+        alert("Role must be viewer or editor.");
+        return;
+      }
+
+      try {
+        await fetchJson(`/api/notes/${noteId}/share`, {
+          method: "POST",
+          body: JSON.stringify({ username, role }),
+        });
+
+        alert(`Shared with ${username} as ${role}.`);
+        await refreshNotesList();
+      } catch (error) {
+        alert(error.message || "Could not share the note.");
+      }
+    }
+
     async function renameNoteById(noteId) {
+      const noteSummary = notes.find((note) => note.id === noteId);
+
+      if (!noteSummary || !canEditNoteRole(noteSummary.accessRole)) {
+        alert("You only have view access to this note.");
+        return;
+      }
+
       const currentTitle =
-        notes.find((note) => note.id === noteId)?.title || "Untitled Note";
+        noteSummary.title || "Untitled Note";
       const nextTitle = await openTextModal({
         title: "Rename Note",
         message: "Choose a new name for this note.",
@@ -1377,8 +1480,15 @@
     }
 
     async function deleteNoteById(noteId) {
+      const noteSummary = notes.find((note) => note.id === noteId);
+
+      if (!noteSummary || noteSummary.accessRole !== "owner") {
+        alert("Only the owner can delete this note.");
+        return;
+      }
+
       const noteTitle =
-        notes.find((note) => note.id === noteId)?.title || "this note";
+        noteSummary.title || "this note";
       const confirmed = await openConfirmModal({
         title: "Delete Note",
         message: `Delete "${noteTitle}"? This cannot be undone.`,
@@ -1445,7 +1555,13 @@
     }
 
     function flushPendingText() {
-      if (!sessionToken || !activeNoteId || !ws || ws.readyState !== WebSocket.OPEN) {
+      if (
+        !sessionToken ||
+        !activeNoteId ||
+        !canEditActiveNote() ||
+        !ws ||
+        ws.readyState !== WebSocket.OPEN
+      ) {
         return;
       }
 
@@ -1491,6 +1607,26 @@
         if (data.type === "notes-list") {
           notes = data.notes || [];
           renderNotes();
+
+          if (activeNoteId && !notes.some((note) => note.id === activeNoteId)) {
+            const nextNote = notes[0] || null;
+
+            if (nextNote) {
+              openNote(nextNote.id);
+            } else {
+              setActiveNote(null);
+            }
+          } else if (activeNoteId) {
+            const activeSummary = getActiveNoteSummary();
+
+            if (activeSummary && activeSummary.accessRole !== activeNoteAccessRole) {
+              activeNoteAccessRole = activeSummary.accessRole || null;
+              syncActiveEditorAccess();
+              const roleSuffix = activeNoteAccessRole === "viewer" ? " - View only" : "";
+              activeNoteMeta.textContent = `Last updated ${formatUpdatedAt(activeSummary.updatedAt)}${roleSuffix}`;
+            }
+          }
+
           return;
         }
 
@@ -1504,8 +1640,9 @@
           upsertNoteSummary(data.note);
 
           if (data.note.id === activeNoteId) {
+            const roleSuffix = activeNoteAccessRole === "viewer" ? " - View only" : "";
             activeNoteTitle.textContent = data.note.title;
-            activeNoteMeta.textContent = `Last updated ${formatUpdatedAt(data.note.updatedAt)}`;
+            activeNoteMeta.textContent = `Last updated ${formatUpdatedAt(data.note.updatedAt)}${roleSuffix}`;
           }
 
           renderNotes();
@@ -1513,9 +1650,15 @@
         }
 
         if (data.type === "note-deleted") {
-          removeNoteSummary(data.note.id);
+          const deletedNoteId = data.noteId || data.note?.id;
 
-          if (data.note.id === activeNoteId) {
+          if (!deletedNoteId) {
+            return;
+          }
+
+          removeNoteSummary(deletedNoteId);
+
+          if (deletedNoteId === activeNoteId) {
             const nextNote = notes[0] || null;
             if (nextNote) {
               openNote(nextNote.id);
@@ -1530,30 +1673,54 @@
         }
 
         if (data.type === "note-update") {
+          const existingNote = notes.find((note) => note.id === data.noteId);
+
           upsertNoteSummary({
             id: data.noteId,
-            title: notes.find((note) => note.id === data.noteId)?.title || "Untitled Note",
+            title: existingNote?.title || "Untitled Note",
             version: data.version,
             updatedAt: data.updatedAt,
+            accessRole: existingNote?.accessRole || "owner",
+            isOwner: existingNote?.isOwner ?? true,
           });
 
           if (data.noteId === activeNoteId) {
             if (data.sourceClientId === clientId) {
               activeNoteVersion = data.version || activeNoteVersion;
-              activeNoteMeta.textContent = `Last updated ${formatUpdatedAt(data.updatedAt)}`;
+              const roleSuffix = activeNoteAccessRole === "viewer" ? " - View only" : "";
+              activeNoteMeta.textContent = `Last updated ${formatUpdatedAt(data.updatedAt)}${roleSuffix}`;
               renderNotes();
               return;
             }
 
             if ((data.version || 0) > activeNoteVersion) {
               activeNoteVersion = data.version || 0;
-              activeNoteMeta.textContent = `Last updated ${formatUpdatedAt(data.updatedAt)}`;
+              const roleSuffix = activeNoteAccessRole === "viewer" ? " - View only" : "";
+              activeNoteMeta.textContent = `Last updated ${formatUpdatedAt(data.updatedAt)}${roleSuffix}`;
               setEditorMarkup(data.text || "");
               updateFormattingButtons();
             }
           }
 
           renderNotes();
+          return;
+        }
+
+        if (data.type === "note-access-revoked") {
+          removeNoteSummary(data.noteId);
+
+          if (activeNoteId === data.noteId) {
+            const nextNote = notes[0] || null;
+
+            if (nextNote) {
+              openNote(nextNote.id);
+            } else {
+              setActiveNote(null);
+            }
+          } else {
+            renderNotes();
+          }
+
           return;
         }
 
@@ -1565,6 +1732,8 @@
 
       ws.onclose = () => {
         editor.contentEditable = "false";
+        boldToggle.disabled = true;
+        underlineToggle.disabled = true;
         scheduleReconnect();
       };
 
@@ -1604,7 +1773,7 @@
     });
 
     editor.addEventListener("input", () => {
-      if (!sessionToken || !activeNoteId) {
+      if (!sessionToken || !activeNoteId || !canEditActiveNote()) {
         return;
       }
 
@@ -1616,6 +1785,10 @@
     editor.addEventListener("mouseup", updateFormattingButtons);
     editor.addEventListener("focus", updateFormattingButtons);
     editor.addEventListener("paste", (event) => {
+      if (!canEditActiveNote()) {
+        return;
+      }
+
       event.preventDefault();
 
       const text = event.clipboardData?.getData("text/plain") || "";
@@ -1623,7 +1796,6 @@
       queueSend();
       updateFormattingButtons();
     });
-
 
     editor.addEventListener("wheel", (event) => {
       if (!event.ctrlKey) {
@@ -1647,7 +1819,7 @@
     });
 
     boldToggle.addEventListener("click", () => {
-      if (!activeNoteId) {
+      if (!activeNoteId || !canEditActiveNote()) {
         return;
       }
 
@@ -1658,7 +1830,7 @@
     });
 
     underlineToggle.addEventListener("click", () => {
-      if (!activeNoteId) {
+      if (!activeNoteId || !canEditActiveNote()) {
         return;
       }
 
