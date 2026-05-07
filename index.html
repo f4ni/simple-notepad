@@ -160,6 +160,16 @@
         margin-bottom: 14px;
       }
 
+      .modal-card select {
+        width: 100%;
+        padding: 12px 14px;
+        border: 1px solid var(--border-color);
+        border-radius: 10px;
+        background: var(--control-bg);
+        color: var(--control-text);
+        margin-bottom: 14px;
+      }
+
       .settings-form {
         display: flex;
         flex-direction: column;
@@ -661,6 +671,10 @@
         <h3 id="modalTitle"></h3>
         <p id="modalMessage"></p>
         <input id="modalInput" type="text" hidden />
+        <select id="modalSelect" hidden>
+          <option value="viewer">Viewer</option>
+          <option value="editor">Editor</option>
+        </select>
         <div class="modal-actions">
           <button id="modalCancel" type="button">Cancel</button>
           <button id="modalConfirm" type="button">Confirm</button>
@@ -775,6 +789,7 @@
     const modalTitle = document.getElementById("modalTitle");
     const modalMessage = document.getElementById("modalMessage");
     const modalInput = document.getElementById("modalInput");
+    const modalSelect = document.getElementById("modalSelect");
     const modalCancel = document.getElementById("modalCancel");
     const modalConfirm = document.getElementById("modalConfirm");
     const settingsBackdrop = document.getElementById("settingsBackdrop");
@@ -814,6 +829,7 @@
     let currentUser = null;
     let authMode = "login";
     let modalResolver = null;
+    let modalMode = "text";
 
     let preferences = {
       theme: "sand",
@@ -1089,6 +1105,7 @@
       modalBackdrop.hidden = true;
       const resolver = modalResolver;
       modalResolver = null;
+      modalMode = "text";
 
       if (resolver) {
         resolver(result);
@@ -1099,10 +1116,12 @@
       modalTitle.textContent = title;
       modalMessage.textContent = message;
       modalInput.hidden = false;
+      modalSelect.hidden = true;
       modalInput.value = value;
       modalConfirm.textContent = confirmLabel;
       modalConfirm.classList.remove("danger-button");
       modalBackdrop.hidden = false;
+      modalMode = "text";
       modalInput.focus();
       modalInput.select();
 
@@ -1115,11 +1134,38 @@
       modalTitle.textContent = title;
       modalMessage.textContent = message;
       modalInput.hidden = true;
+      modalSelect.hidden = true;
       modalInput.value = "";
       modalConfirm.textContent = confirmLabel;
       modalConfirm.classList.add("danger-button");
       modalBackdrop.hidden = false;
+      modalMode = "confirm";
       modalConfirm.focus();
+
+      return new Promise((resolve) => {
+        modalResolver = resolve;
+      });
+    }
+
+    function openShareModal({
+      title,
+      message,
+      username = "",
+      role = "viewer",
+      confirmLabel = "Share",
+    }) {
+      modalTitle.textContent = title;
+      modalMessage.textContent = message;
+      modalInput.hidden = false;
+      modalInput.value = username;
+      modalSelect.hidden = false;
+      modalSelect.value = role;
+      modalConfirm.textContent = confirmLabel;
+      modalConfirm.classList.remove("danger-button");
+      modalBackdrop.hidden = false;
+      modalMode = "share";
+      modalInput.focus();
+      modalInput.select();
 
       return new Promise((resolve) => {
         modalResolver = resolve;
@@ -1131,8 +1177,16 @@
     });
 
     modalConfirm.addEventListener("click", () => {
-      if (modalInput.hidden) {
+      if (modalMode === "confirm") {
         closeModal(true);
+        return;
+      }
+
+      if (modalMode === "share") {
+        closeModal({
+          username: modalInput.value.trim(),
+          role: (modalSelect.value || "viewer").trim().toLowerCase(),
+        });
         return;
       }
 
@@ -1148,6 +1202,15 @@
     modalInput.addEventListener("keydown", (event) => {
       if (event.key === "Enter") {
         event.preventDefault();
+
+        if (modalMode === "share") {
+          closeModal({
+            username: modalInput.value.trim(),
+            role: (modalSelect.value || "viewer").trim().toLowerCase(),
+          });
+          return;
+        }
+
         closeModal(modalInput.value.trim());
       }
 
@@ -1412,31 +1475,21 @@
     }
 
     async function shareNoteById(noteId) {
-      const username = await openTextModal({
+      const result = await openShareModal({
         title: "Share Note",
-        message: "Enter the username you want to share with.",
-        confirmLabel: "Next",
-      });
-
-      if (!username) {
-        return;
-      }
-
-      const roleInput = await openTextModal({
-        title: "Access Level",
-        message: "Type viewer or editor.",
-        value: "viewer",
+        message: "Choose who to share with and their access level.",
+        role: "viewer",
         confirmLabel: "Share",
       });
 
-      if (roleInput === null) {
+      if (!result) {
         return;
       }
 
-      const role = roleInput.trim().toLowerCase();
+      const username = (result.username || "").trim();
+      const role = (result.role || "viewer").trim().toLowerCase();
 
-      if (role !== "viewer" && role !== "editor") {
-        alert("Role must be viewer or editor.");
+      if (!username) {
         return;
       }
 
