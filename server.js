@@ -12,6 +12,8 @@ const PORT = process.env.PORT || 3000;
 const DATABASE_URL = process.env.DATABASE_URL;
 const SESSION_SECRET = process.env.SESSION_SECRET;
 const SESSION_TTL_MS = 1000 * 60 * 60 * 24 * 30;
+const MAX_TITLE_LENGTH = 200;
+const MAX_NOTE_CONTENT_LENGTH = 1000000;
 
 if (!DATABASE_URL) {
   console.error("Missing DATABASE_URL environment variable.");
@@ -448,7 +450,7 @@ async function updateUserPassword(userId, nextPassword) {
 async function createNote(ownerId, title, content = "") {
   const noteId = crypto.randomUUID();
   const trimmedTitle = typeof title === "string" ? title.trim() : "";
-  const safeTitle = trimmedTitle || "Untitled Note";
+  const safeTitle = (trimmedTitle || "Untitled Note").slice(0, MAX_TITLE_LENGTH);
 
   const result = await pool.query(
     `
@@ -519,7 +521,7 @@ async function saveNoteContent(noteId, nextText) {
 
 async function renameNote(noteId, nextTitle) {
   const trimmedTitle = typeof nextTitle === "string" ? nextTitle.trim() : "";
-  const safeTitle = trimmedTitle || "Untitled Note";
+  const safeTitle = (trimmedTitle || "Untitled Note").slice(0, MAX_TITLE_LENGTH);
 
   const result = await pool.query(
     `
@@ -1068,6 +1070,11 @@ function attachWebSocketServer(server) {
         if (data.type === "update-note") {
           const noteId = typeof data.noteId === "string" ? data.noteId : "";
           const nextText = typeof data.text === "string" ? data.text : "";
+
+          if (nextText.length > MAX_NOTE_CONTENT_LENGTH) {
+            return;
+          }
+
           const { note, accessRole } = getNoteAccessForUser(noteId, ws.userId);
 
           if (!note || !accessRole || !isEditableRole(accessRole)) {

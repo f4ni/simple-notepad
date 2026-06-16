@@ -1,10 +1,10 @@
 <!DOCTYPE html>
-<html>
+<html lang="en">
   <head>
     <title>Simple Notepad</title>
     <meta charset="utf-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1" />
-    <meta name="theme-color" content="#1f1a14" />
+    <meta name="theme-color" content="#181f21" />
     <meta name="mobile-web-app-capable" content="yes" />
     <meta name="apple-mobile-web-app-capable" content="yes" />
     <meta name="apple-mobile-web-app-status-bar-style" content="default" />
@@ -13,23 +13,36 @@
     <link rel="manifest" href="/manifest.webmanifest" />
     <link rel="icon" href="/icons/icon.svg" type="image/svg+xml" />
     <link rel="apple-touch-icon" href="/icons/icon-192.svg" />
+    <link rel="preconnect" href="https://fonts.googleapis.com" />
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+    <link
+      href="https://fonts.googleapis.com/css2?family=Hanken+Grotesk:wght@400;500;600;700&family=Source+Serif+4:ital,opsz,wght@0,8..60,400;0,8..60,600;0,8..60,700;1,8..60,400&family=JetBrains+Mono:wght@400;500&display=swap"
+      rel="stylesheet"
+    />
     <style>
       :root {
-        --page-bg: #f3f0e8;
-        --panel-bg: rgba(255, 255, 255, 0.88);
+        --bg: #f9f7f2;
+        --surface: #f2efe9;
+        --surface-2: #ffffff;
         --editor-bg: #fffdf8;
-        --editor-text: #1f1a14;
-        --toolbar-text: #1f1a14;
-        --border-color: rgba(31, 26, 20, 0.12);
-        --control-bg: rgba(255, 255, 255, 0.92);
-        --control-text: #1f1a14;
-        --control-active-bg: #1f1a14;
-        --control-active-text: #ffffff;
-        --sidebar-bg: rgba(255, 255, 255, 0.72);
-        --sidebar-text: #1f1a14;
-        --sidebar-active-bg: rgba(31, 26, 20, 0.12);
-        --page-accent: rgba(212, 170, 98, 0.18);
-        --page-gradient-end: #ece7dc;
+        --editor-text: #1b1b1c;
+        --text: #1b1b1c;
+        --text-muted: #434749;
+        --border: rgba(27, 27, 28, 0.12);
+        --accent: #d4a373;
+        --accent-contrast: #1b1b1c;
+        --active-fill: rgba(212, 163, 115, 0.16);
+        --primary-btn-bg: #181f21;
+        --primary-btn-text: #ffffff;
+        --danger: #ba1a1a;
+        --shadow-pop: 0 4px 12px rgba(0, 0, 0, 0.08);
+        --ui-font: "Hanken Grotesk", "Segoe UI", Arial, sans-serif;
+        --editor-font: "Source Serif 4", Georgia, "Times New Roman", serif;
+        --radius-sm: 0.5rem;
+        --radius-md: 0.75rem;
+        --radius-lg: 1rem;
+        --sidebar-width: 280px;
+        --editor-max-width: 800px;
       }
 
       * {
@@ -41,189 +54,223 @@
         min-height: 100dvh;
         height: 100dvh;
         overflow: hidden;
-        font-family: "Segoe UI", Arial, sans-serif;
-        background:
-          radial-gradient(circle at top left, var(--page-accent), transparent 28%),
-          linear-gradient(135deg, var(--page-bg), var(--page-gradient-end));
-        color: var(--editor-text);
+        font-family: var(--ui-font);
+        background: var(--bg);
+        color: var(--text);
+        -webkit-font-smoothing: antialiased;
       }
 
       button,
       input,
       select {
         font: inherit;
+        color: inherit;
       }
 
+      .label-caps {
+        font-size: 12px;
+        font-weight: 700;
+        letter-spacing: 0.05em;
+        text-transform: uppercase;
+        color: var(--text-muted);
+      }
+
+      .btn-primary {
+        border: 0;
+        border-radius: var(--radius-sm);
+        background: var(--primary-btn-bg);
+        color: var(--primary-btn-text);
+        padding: 12px 18px;
+        font-weight: 600;
+        cursor: pointer;
+        transition: transform 120ms ease, opacity 120ms ease;
+      }
+
+      .btn-primary:hover {
+        opacity: 0.92;
+      }
+
+      .btn-primary:active {
+        transform: translateY(1px);
+      }
+
+      .btn-ghost {
+        border: 1px solid var(--border);
+        border-radius: var(--radius-sm);
+        background: transparent;
+        color: var(--text);
+        padding: 10px 16px;
+        font-weight: 500;
+        cursor: pointer;
+        transition: background 120ms ease;
+      }
+
+      .btn-ghost:hover {
+        background: var(--active-fill);
+      }
+
+      .danger-button {
+        background: var(--danger);
+        border-color: var(--danger);
+        color: #fff;
+      }
+
+      /* Auth screen */
       .auth-screen {
-        min-height: 100vh;
+        height: 100dvh;
+        display: flex;
+        flex-direction: column;
+        align-items: center;
+        justify-content: center;
+        gap: 22px;
+        padding: 24px;
+        overflow: auto;
+      }
+
+      .auth-brand {
+        display: flex;
+        flex-direction: column;
+        align-items: center;
+        gap: 12px;
+        text-align: center;
+      }
+
+      .brand-mark {
+        width: 52px;
+        height: 52px;
+        border-radius: 14px;
+        background: var(--primary-btn-bg);
+        color: var(--primary-btn-text);
         display: flex;
         align-items: center;
         justify-content: center;
-        padding: 24px;
+      }
+
+      .brand-mark svg {
+        width: 26px;
+        height: 26px;
+      }
+
+      .auth-brand h1 {
+        margin: 0;
+        font-size: 30px;
+        font-weight: 700;
+        letter-spacing: -0.02em;
+      }
+
+      .auth-brand p {
+        margin: 0;
+        max-width: 320px;
+        color: var(--text-muted);
+        line-height: 1.5;
       }
 
       .auth-card {
         width: min(420px, 100%);
-        background: var(--panel-bg);
-        backdrop-filter: blur(14px);
-        border: 1px solid var(--border-color);
-        border-radius: 20px;
-        padding: 28px;
+        background: var(--surface-2);
+        border: 1px solid var(--border);
+        border-radius: var(--radius-lg);
+        padding: 26px;
+        box-shadow: var(--shadow-pop);
       }
 
-      .auth-card h1 {
-        margin: 0 0 8px;
+      .auth-tabs {
+        display: grid;
+        grid-template-columns: 1fr 1fr;
+        margin-bottom: 22px;
+        border-bottom: 1px solid var(--border);
       }
 
-      .auth-card p {
-        margin: 0 0 20px;
-        opacity: 0.75;
+      .auth-tab {
+        border: 0;
+        background: none;
+        padding: 12px 4px;
+        font-weight: 600;
+        color: var(--text-muted);
+        cursor: pointer;
+        border-bottom: 2px solid transparent;
+        margin-bottom: -1px;
+      }
+
+      .auth-tab.active {
+        color: var(--text);
+        border-bottom-color: var(--text);
       }
 
       .auth-form {
         display: flex;
         flex-direction: column;
-        gap: 12px;
+        gap: 20px;
       }
 
-      .auth-form input,
-      .auth-form button,
-      .toolbar select,
-      .toolbar input[type="color"],
-      .toolbar button,
-      .new-note-button {
-        border: 1px solid var(--border-color);
-        border-radius: 10px;
-        background: var(--control-bg);
-        color: var(--control-text);
-      }
-
-      .auth-form input,
-      .auth-form button {
-        padding: 12px 14px;
-      }
-
-      .auth-toggle {
-        margin-top: 16px;
-        background: none;
-        border: 0;
-        padding: 0;
-        color: var(--toolbar-text);
-        cursor: pointer;
-        text-decoration: underline;
-      }
-
-      .auth-error {
-        min-height: 20px;
-        margin-top: 12px;
-        color: #b42318;
-      }
-
-      .modal-backdrop {
-        position: fixed;
-        inset: 0;
-        background: rgba(15, 18, 26, 0.38);
-        display: flex;
-        align-items: center;
-        justify-content: center;
-        padding: 24px;
-        z-index: 20;
-      }
-
-      .modal-card {
-        width: min(420px, 100%);
-        background: var(--panel-bg);
-        backdrop-filter: blur(14px);
-        border: 1px solid var(--border-color);
-        border-radius: 18px;
-        padding: 22px;
-      }
-
-      .modal-card h3 {
-        margin: 0 0 8px;
-        color: var(--toolbar-text);
-      }
-
-      .modal-card p {
-        margin: 0 0 16px;
-        color: var(--toolbar-text);
-        opacity: 0.82;
-      }
-
-      .modal-card input {
-        width: 100%;
-        padding: 12px 14px;
-        border: 1px solid var(--border-color);
-        border-radius: 10px;
-        background: var(--control-bg);
-        color: var(--control-text);
-        margin-bottom: 14px;
-      }
-
-      .modal-card select {
-        width: 100%;
-        padding: 12px 14px;
-        border: 1px solid var(--border-color);
-        border-radius: 10px;
-        background: var(--control-bg);
-        color: var(--control-text);
-        margin-bottom: 14px;
-      }
-
-      .settings-form {
-        display: flex;
-        flex-direction: column;
-        gap: 12px;
-      }
-
-      .settings-form label {
+      .field {
         display: flex;
         flex-direction: column;
         gap: 6px;
-        color: var(--toolbar-text);
-        font-size: 14px;
       }
 
-      .settings-form input {
-        width: 100%;
-        padding: 12px 14px;
-        border: 1px solid var(--border-color);
-        border-radius: 10px;
-        background: var(--control-bg);
-        color: var(--control-text);
-      }
-
-      .settings-error {
-        min-height: 18px;
-        color: #b42318;
-        font-size: 13px;
-      }
-
-      .modal-actions {
+      .field-input {
         display: flex;
-        justify-content: flex-end;
-        gap: 10px;
+        align-items: center;
+        gap: 8px;
+        border: 0;
+        border-bottom: 1px solid var(--border);
+        padding: 6px 2px;
+        transition: border-color 120ms ease, box-shadow 120ms ease;
       }
 
-      .modal-actions button {
-        border: 1px solid var(--border-color);
-        border-radius: 10px;
-        padding: 8px 12px;
-        background: var(--control-bg);
-        color: var(--control-text);
+      .field-input:focus-within {
+        border-bottom-color: var(--accent);
+        box-shadow: 0 1px 0 0 var(--accent);
+      }
+
+      .field-input input {
+        flex: 1;
+        min-width: 0;
+        border: 0;
+        background: transparent;
+        padding: 8px 0;
+        outline: none;
+      }
+
+      .icon-button {
+        border: 0;
+        background: none;
+        padding: 4px;
+        display: inline-flex;
+        align-items: center;
+        justify-content: center;
+        color: var(--text-muted);
         cursor: pointer;
+        border-radius: 8px;
+      }
+
+      .icon-button:hover {
+        background: var(--active-fill);
+        color: var(--text);
+      }
+
+      .icon-button svg {
+        width: 18px;
+        height: 18px;
+      }
+
+      .auth-error,
+      .settings-error,
+      .share-error {
+        min-height: 18px;
+        color: var(--danger);
         font-size: 13px;
       }
 
-      .modal-actions .danger-button {
-        background: #b42318;
-        border-color: #b42318;
-        color: #fff;
+      .auth-form .btn-primary {
+        margin-top: 4px;
       }
 
+      /* App shell */
       .app-shell {
         display: grid;
-        grid-template-columns: 280px 1fr;
+        grid-template-columns: var(--sidebar-width) 1fr;
         height: 100dvh;
         overflow: hidden;
       }
@@ -231,189 +278,257 @@
       .sidebar {
         display: flex;
         flex-direction: column;
-        gap: 14px;
-        padding: 18px;
+        gap: 18px;
+        padding: 20px 16px;
         min-height: 0;
         overflow: hidden;
-        background: var(--sidebar-bg);
-        backdrop-filter: blur(14px);
-        border-right: 1px solid var(--border-color);
+        background: var(--surface);
+        border-right: 1px solid var(--border);
       }
 
-      .sidebar-top {
-        display: flex;
-        justify-content: space-between;
-        align-items: center;
-        gap: 12px;
-      }
-
-      .sidebar-title {
+      .sidebar-brand h1 {
         margin: 0;
-        font-size: 20px;
-        color: var(--sidebar-text);
+        font-size: 22px;
+        font-weight: 700;
+        letter-spacing: -0.01em;
+      }
+
+      .sidebar-brand p {
+        margin: 2px 0 0;
+        font-size: 12px;
+        color: var(--text-muted);
       }
 
       .new-note-button {
-        padding: 7px 10px;
-        font-size: 13px;
-      }
-
-      .sidebar button {
-        border: 1px solid var(--border-color);
-        border-radius: 10px;
-        background: var(--control-bg);
-        color: var(--control-text);
-        padding: 7px 10px;
-        cursor: pointer;
-        font-size: 13px;
-      }
-
-      .user-chip {
-        flex: 1;
-        padding: 10px 12px;
-        border-radius: 12px;
-        background: var(--sidebar-active-bg);
-        color: var(--sidebar-text);
-        font-size: 14px;
-      }
-
-      .sidebar-user-row {
-        display: flex;
+        width: 100%;
+        display: inline-flex;
         align-items: center;
+        justify-content: center;
         gap: 8px;
       }
 
-      .settings-button {
-        min-width: 34px;
-        padding: 7px 8px;
-        font-size: 15px;
-        line-height: 1;
+      .new-note-button svg {
+        width: 18px;
+        height: 18px;
       }
 
-      .sidebar-footer {
+      .sidebar-nav {
         display: flex;
         flex-direction: column;
+        gap: 2px;
+      }
+
+      .nav-item {
+        display: flex;
+        align-items: center;
         gap: 10px;
-        margin-top: auto;
-        padding-top: 8px;
+        border: 0;
+        background: none;
+        padding: 9px 10px;
+        border-radius: var(--radius-sm);
+        color: var(--text);
+        cursor: pointer;
+        text-align: left;
+        font-weight: 500;
+      }
+
+      .nav-item svg {
+        width: 18px;
+        height: 18px;
+        color: var(--text-muted);
+        flex-shrink: 0;
+      }
+
+      .nav-item:hover {
+        background: var(--active-fill);
+      }
+
+      .nav-item.active {
+        background: var(--active-fill);
+        font-weight: 600;
+      }
+
+      .nav-item.active svg {
+        color: var(--accent);
+      }
+
+      .nav-count {
+        margin-left: auto;
+        font-size: 12px;
+        color: var(--text-muted);
+      }
+
+      .note-list-section {
+        display: flex;
+        flex-direction: column;
+        gap: 8px;
+        min-height: 0;
+        flex: 1;
+      }
+
+      .note-list-section .label-caps {
+        padding: 0 6px;
       }
 
       .note-list {
         display: flex;
         flex-direction: column;
-        gap: 8px;
-        overflow-y: hidden;
-        scrollbar-width: none;
+        gap: 4px;
+        overflow-y: auto;
+        scrollbar-width: thin;
+        padding-right: 2px;
       }
 
       .note-list::-webkit-scrollbar {
-        width: 0;
-        height: 0;
+        width: 8px;
       }
 
-      .note-list:hover {
-        overflow-y: auto;
-        scrollbar-width: thin;
-      }
-
-      .note-list:hover::-webkit-scrollbar {
-        width: 10px;
-      }
-
-      .note-list:hover::-webkit-scrollbar-track {
-        background: transparent;
-      }
-
-      .note-list:hover::-webkit-scrollbar-thumb {
-        background: rgba(31, 26, 20, 0.22);
+      .note-list::-webkit-scrollbar-thumb {
+        background: var(--border);
         border-radius: 999px;
-        border: 3px solid transparent;
-        background-clip: content-box;
       }
 
       .note-item {
         position: relative;
-        width: 100%;
-        border: 1px solid transparent;
-        border-radius: 12px;
-        padding: 0;
-        text-align: left;
-        background: transparent;
-        color: var(--sidebar-text);
-        display: block;
+        border-radius: var(--radius-sm);
+        overflow: hidden;
       }
 
       .note-item.active {
-        background: var(--sidebar-active-bg);
-        border-color: var(--border-color);
+        background: var(--active-fill);
+        box-shadow: inset 4px 0 0 0 var(--accent);
       }
 
       .note-select-button {
         width: 100%;
         border: 0;
-        border-radius: 12px;
-        padding: 12px 44px 12px 12px;
-        text-align: left;
         background: transparent;
-        color: inherit;
+        padding: 10px 40px 10px 14px;
+        text-align: left;
         cursor: pointer;
         display: block;
-      }
-
-      .note-select-button:focus-visible {
-        outline: 2px solid rgba(31, 26, 20, 0.28);
-        outline-offset: 2px;
-      }
-
-      .note-item-content {
-        flex: 1;
-        min-width: 0;
+        color: inherit;
       }
 
       .note-item-title {
         display: block;
-        font-weight: 700;
-        margin-bottom: 4px;
+        font-weight: 600;
+        font-size: 14px;
+        margin-bottom: 3px;
         word-break: break-word;
       }
 
       .note-item-meta {
         display: block;
         font-size: 12px;
-        opacity: 0.7;
+        color: var(--text-muted);
+        white-space: nowrap;
+        overflow: hidden;
+        text-overflow: ellipsis;
       }
 
       .note-delete-button {
         position: absolute;
         top: 8px;
         right: 8px;
-        width: 30px;
-        height: 30px;
+        width: 28px;
+        height: 28px;
         padding: 0;
-        border-radius: 10px;
-        border: 1px solid var(--border-color);
-        background: var(--control-bg);
-        color: var(--control-text);
+        border-radius: 8px;
+        border: 1px solid var(--border);
+        background: var(--surface-2);
+        color: var(--text-muted);
         cursor: pointer;
-        line-height: 1;
-        flex-shrink: 0;
+        display: inline-flex;
+        align-items: center;
+        justify-content: center;
         opacity: 0;
         pointer-events: none;
-        transition: opacity 120ms ease, transform 120ms ease;
+        transition: opacity 120ms ease;
+      }
+
+      .note-delete-button svg {
+        width: 15px;
+        height: 15px;
       }
 
       .note-item:hover .note-delete-button,
-      .note-item:focus-within .note-delete-button,
-      .note-delete-button:hover {
-        opacity: 0.72;
+      .note-item:focus-within .note-delete-button {
+        opacity: 1;
         pointer-events: auto;
       }
 
       .note-delete-button:hover {
-        opacity: 1;
-        transform: translateY(-1px);
+        color: var(--danger);
+        border-color: var(--danger);
       }
 
+      .note-empty-hint {
+        padding: 12px 14px;
+        font-size: 13px;
+        color: var(--text-muted);
+      }
+
+      .sidebar-footer {
+        display: flex;
+        flex-direction: column;
+        gap: 8px;
+        margin-top: auto;
+        border-top: 1px solid var(--border);
+        padding-top: 12px;
+      }
+
+      .sidebar-user-row {
+        display: flex;
+        align-items: center;
+        gap: 10px;
+      }
+
+      .user-avatar {
+        width: 34px;
+        height: 34px;
+        border-radius: 999px;
+        background: var(--accent);
+        color: var(--accent-contrast);
+        display: inline-flex;
+        align-items: center;
+        justify-content: center;
+        font-weight: 700;
+        font-size: 13px;
+        flex-shrink: 0;
+      }
+
+      .user-chip {
+        flex: 1;
+        min-width: 0;
+        font-size: 13px;
+        color: var(--text-muted);
+        overflow: hidden;
+        text-overflow: ellipsis;
+        white-space: nowrap;
+      }
+
+      .sidebar-footer-actions {
+        display: flex;
+        gap: 8px;
+      }
+
+      .sidebar-footer-actions button {
+        flex: 1;
+        display: inline-flex;
+        align-items: center;
+        justify-content: center;
+        gap: 8px;
+        font-size: 13px;
+        padding: 8px 10px;
+      }
+
+      .sidebar-footer-actions svg {
+        width: 16px;
+        height: 16px;
+      }
+
+      /* Main panel */
       .main-panel {
         display: flex;
         flex-direction: column;
@@ -422,148 +537,200 @@
         overflow: hidden;
       }
 
-      .editor-area {
+      .topbar {
         display: flex;
-        flex: 1;
-        min-height: 0;
-      }
-
-      .toolbar {
-        display: flex;
-        flex-wrap: wrap;
         align-items: center;
-        gap: 12px;
-        padding: 14px 18px;
-        background: var(--panel-bg);
-        backdrop-filter: blur(12px);
-        border-bottom: 1px solid var(--border-color);
+        gap: 16px;
+        padding: 14px 22px;
+        border-bottom: 1px solid var(--border);
+        background: var(--bg);
       }
 
-      .note-heading {
-        margin-right: auto;
-        min-width: 180px;
+      .topbar-title-wrap {
+        min-width: 0;
+        display: flex;
+        flex-direction: column;
+        gap: 2px;
       }
 
-      .toolbar-group {
-        display: inline-flex;
+      .topbar-title-row {
+        display: flex;
         align-items: center;
         gap: 8px;
-        padding: 6px 8px;
-        border: 1px solid var(--border-color);
-        border-radius: 14px;
-        background: rgba(255, 255, 255, 0.18);
-      }
-
-      .toolbar-divider {
-        width: 1px;
-        align-self: stretch;
-        background: var(--border-color);
-        opacity: 0.85;
-      }
-
-      .note-heading-row {
-        display: flex;
-        align-items: center;
-        gap: 10px;
-      }
-
-      .note-heading-row #activeNoteTitle {
-        flex: 1;
         min-width: 0;
+      }
+
+      #activeNoteTitle {
+        margin: 0;
+        font-size: 18px;
+        font-weight: 600;
         overflow: hidden;
         text-overflow: ellipsis;
         white-space: nowrap;
       }
 
-      .note-heading-actions {
-        display: inline-flex;
+      #activeNoteMeta {
+        margin: 0;
+        font-size: 12px;
+        color: var(--text-muted);
+      }
+
+      .topbar-spacer {
+        flex: 1;
+      }
+
+      .search-box {
+        display: flex;
+        align-items: center;
+        gap: 8px;
+        background: var(--surface);
+        border: 1px solid var(--border);
+        border-radius: 999px;
+        padding: 7px 14px;
+        width: min(320px, 32vw);
+      }
+
+      .search-box svg {
+        width: 16px;
+        height: 16px;
+        color: var(--text-muted);
+        flex-shrink: 0;
+      }
+
+      .search-box input {
+        flex: 1;
+        min-width: 0;
+        border: 0;
+        background: transparent;
+        outline: none;
+      }
+
+      .topbar-actions {
+        display: flex;
         align-items: center;
         gap: 8px;
       }
 
-      .toolbar .note-heading-actions button {
-        min-width: 38px;
-        width: 38px;
-        height: 38px;
-        padding: 0;
+      .share-button {
         display: inline-flex;
         align-items: center;
+        gap: 8px;
+        background: var(--accent);
+        color: var(--accent-contrast);
+        border: 0;
+        border-radius: var(--radius-sm);
+        padding: 9px 16px;
+        font-weight: 600;
+        cursor: pointer;
+      }
+
+      .share-button svg {
+        width: 16px;
+        height: 16px;
+      }
+
+      .topbar .icon-button svg {
+        width: 20px;
+        height: 20px;
+      }
+
+      .canvas {
+        flex: 1;
+        min-height: 0;
+        overflow: auto;
+        padding: 28px 24px 60px;
+        display: flex;
         justify-content: center;
       }
 
-      .toolbar .note-heading-actions svg {
+      .editor-column {
+        width: 100%;
+        max-width: var(--editor-max-width);
+        display: flex;
+        flex-direction: column;
+        gap: 16px;
+      }
+
+      .toolbar {
+        position: sticky;
+        top: 0;
+        z-index: 5;
+        display: flex;
+        align-items: center;
+        gap: 6px;
+        padding: 8px 12px;
+        background: var(--surface-2);
+        border: 1px solid var(--border);
+        border-radius: var(--radius-md);
+        box-shadow: var(--shadow-pop);
+      }
+
+      .toolbar-button {
+        min-width: 38px;
+        height: 38px;
+        padding: 0 10px;
+        border: 0;
+        background: transparent;
+        border-radius: var(--radius-sm);
+        color: var(--text-muted);
+        cursor: pointer;
+        display: inline-flex;
+        align-items: center;
+        justify-content: center;
+        font-weight: 600;
+      }
+
+      .toolbar-button:hover:not(:disabled) {
+        background: var(--active-fill);
+        color: var(--text);
+      }
+
+      .toolbar-button.active {
+        background: var(--primary-btn-bg);
+        color: var(--primary-btn-text);
+      }
+
+      .toolbar-button:disabled {
+        opacity: 0.4;
+        cursor: not-allowed;
+      }
+
+      .toolbar-button svg {
         width: 18px;
         height: 18px;
       }
 
-      .note-heading h2,
-      .session-status {
-        margin: 0;
-        font-size: 20px;
-        color: var(--toolbar-text);
+      .toolbar-divider {
+        width: 1px;
+        align-self: stretch;
+        margin: 4px 2px;
+        background: var(--border);
       }
 
-      .note-heading p {
-        margin: 4px 0 0;
-        font-size: 12px;
-        color: var(--toolbar-text);
-        opacity: 0.75;
-      }
-
-      .toolbar label {
-        display: inline-flex;
-        align-items: center;
-        gap: 8px;
-        font-size: 14px;
-        color: var(--toolbar-text);
-      }
-
-      .toolbar select {
-        appearance: none;
-        min-width: 120px;
-        padding: 9px 10px;
-      }
-
-      .toolbar button {
-        min-width: 44px;
-        padding: 9px 12px;
-        cursor: pointer;
-      }
-
-      .toolbar button.active {
-        background: var(--control-active-bg);
-        color: var(--control-active-text);
-      }
-
-      .logout-button {
-        width: 100%;
-        text-align: center;
-      }
-
-      .toolbar input[type="color"] {
-        width: 52px;
-        height: 40px;
-        padding: 4px;
+      .editor-sheet {
+        background: var(--editor-bg);
+        border: 1px solid var(--border);
+        border-radius: var(--radius-lg);
+        box-shadow: var(--shadow-pop);
+        min-height: 60vh;
       }
 
       .editor {
         width: 100%;
-        flex: 1;
-        min-height: 0;
+        min-height: 60vh;
         border: 0;
-        padding: 20px;
+        padding: 40px 48px;
+        font-family: var(--editor-font);
         font-size: 18px;
-        line-height: 1.5;
+        line-height: 1.8;
         color: var(--editor-text);
-        background: var(--editor-bg);
+        background: transparent;
         outline: none;
-        overflow: auto;
         white-space: pre-wrap;
         word-break: break-word;
       }
 
-      .editor *,
-      .editor font {
+      .editor * {
         font-size: inherit !important;
         line-height: inherit !important;
       }
@@ -575,21 +742,270 @@
       }
 
       .editor li {
-        margin: 4px 0;
+        margin: 6px 0;
       }
 
       .editor:empty:before {
         content: attr(data-placeholder);
-        color: rgba(127, 127, 127, 0.8);
+        color: var(--text-muted);
+        opacity: 0.7;
       }
 
       .empty-state {
         display: flex;
+        flex-direction: column;
         align-items: center;
         justify-content: center;
+        gap: 8px;
+        text-align: center;
         flex: 1;
+        padding: 48px 24px;
+        color: var(--text-muted);
+      }
+
+      /* Modals */
+      .modal-backdrop {
+        position: fixed;
+        inset: 0;
+        background: rgba(20, 22, 26, 0.42);
+        display: flex;
+        align-items: center;
+        justify-content: center;
         padding: 24px;
-        color: var(--toolbar-text);
+        z-index: 40;
+      }
+
+      .modal-card {
+        width: min(440px, 100%);
+        background: var(--surface-2);
+        border: 1px solid var(--border);
+        border-radius: var(--radius-lg);
+        box-shadow: 0 10px 40px rgba(0, 0, 0, 0.18);
+        padding: 22px;
+        max-height: 88dvh;
+        overflow: auto;
+      }
+
+      .modal-card h3 {
+        margin: 0 0 6px;
+        font-size: 20px;
+        font-weight: 700;
+      }
+
+      .modal-card .modal-sub {
+        margin: 0 0 18px;
+        color: var(--text-muted);
+        font-size: 14px;
+      }
+
+      .modal-card input,
+      .modal-card select {
+        width: 100%;
+        padding: 11px 12px;
+        border: 1px solid var(--border);
+        border-radius: var(--radius-sm);
+        background: var(--surface-2);
+        outline: none;
+      }
+
+      .modal-card input:focus,
+      .modal-card select:focus {
+        border-color: var(--accent);
+        box-shadow: 0 0 0 3px var(--active-fill);
+      }
+
+      .modal-input-stack {
+        display: flex;
+        flex-direction: column;
+        gap: 14px;
+        margin-bottom: 16px;
+      }
+
+      .modal-actions {
+        display: flex;
+        justify-content: flex-end;
+        gap: 10px;
+      }
+
+      .modal-actions button {
+        padding: 9px 16px;
+        font-size: 14px;
+      }
+
+      .modal-head {
+        display: flex;
+        align-items: flex-start;
+        justify-content: space-between;
+        gap: 12px;
+      }
+
+      /* Share dialog */
+      .share-add-row {
+        display: flex;
+        gap: 8px;
+        margin: 6px 0 18px;
+      }
+
+      .share-add-row input {
+        flex: 1;
+        min-width: 0;
+      }
+
+      .share-add-row select {
+        width: auto;
+        min-width: 96px;
+      }
+
+      .share-add-row .btn-primary {
+        padding: 10px 16px;
+        white-space: nowrap;
+      }
+
+      .collab-list {
+        display: flex;
+        flex-direction: column;
+        gap: 6px;
+        margin: 6px 0 18px;
+      }
+
+      .collab-row {
+        display: flex;
+        align-items: center;
+        gap: 12px;
+      }
+
+      .collab-meta {
+        min-width: 0;
+        flex: 1;
+      }
+
+      .collab-name {
+        font-weight: 600;
+        font-size: 14px;
+        overflow: hidden;
+        text-overflow: ellipsis;
+        white-space: nowrap;
+      }
+
+      .collab-sub {
+        font-size: 12px;
+        color: var(--text-muted);
+      }
+
+      .collab-role {
+        font-size: 13px;
+        color: var(--text-muted);
+      }
+
+      .collab-remove {
+        width: 30px;
+        height: 30px;
+      }
+
+      .collab-remove svg {
+        width: 16px;
+        height: 16px;
+      }
+
+      /* Settings */
+      .settings-section {
+        margin-bottom: 22px;
+      }
+
+      .settings-section > .label-caps {
+        display: block;
+        margin-bottom: 10px;
+      }
+
+      .settings-form {
+        display: flex;
+        flex-direction: column;
+        gap: 14px;
+      }
+
+      .settings-field label {
+        display: block;
+        font-size: 13px;
+        color: var(--text-muted);
+        margin-bottom: 6px;
+      }
+
+      .theme-grid {
+        display: grid;
+        grid-template-columns: repeat(4, 1fr);
+        gap: 10px;
+      }
+
+      .theme-card {
+        border: 2px solid var(--border);
+        border-radius: var(--radius-md);
+        padding: 10px 8px;
+        background: var(--surface-2);
+        cursor: pointer;
+        display: flex;
+        flex-direction: column;
+        gap: 8px;
+        align-items: center;
+      }
+
+      .theme-card.active {
+        border-color: var(--accent);
+      }
+
+      .theme-swatch {
+        width: 100%;
+        height: 42px;
+        border-radius: 8px;
+        border: 1px solid var(--border);
+      }
+
+      .theme-name {
+        font-size: 12px;
+        font-weight: 600;
+      }
+
+      .font-row {
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        margin-bottom: 8px;
+      }
+
+      .font-row .font-value {
+        color: var(--accent);
+        font-weight: 600;
+        font-size: 13px;
+      }
+
+      input[type="range"] {
+        width: 100%;
+        accent-color: var(--accent);
+      }
+
+      .font-preview {
+        margin-top: 12px;
+        padding: 16px;
+        border: 1px solid var(--border);
+        border-radius: var(--radius-md);
+        background: var(--surface);
+        font-family: var(--editor-font);
+        line-height: 1.8;
+      }
+
+      .bg-row {
+        display: flex;
+        align-items: center;
+        gap: 12px;
+        margin-top: 12px;
+      }
+
+      .bg-row input[type="color"] {
+        width: 52px;
+        height: 40px;
+        padding: 4px;
+        border: 1px solid var(--border);
+        border-radius: var(--radius-sm);
+        background: var(--surface-2);
       }
 
       [hidden] {
@@ -606,46 +1022,36 @@
         .app-shell {
           grid-template-columns: 1fr;
           grid-template-rows: auto 1fr;
-          min-height: 100dvh;
           height: auto;
+          min-height: 100dvh;
         }
 
         .sidebar {
           border-right: 0;
-          border-bottom: 1px solid var(--border-color);
-          max-height: 38dvh;
-          padding: 12px;
+          border-bottom: 1px solid var(--border);
+          max-height: 42dvh;
         }
 
-        .toolbar {
-          gap: 8px;
-          padding: 10px 12px;
-        }
-
-        .note-heading {
-          min-width: 0;
+        .search-box {
           width: 100%;
-          margin-right: 0;
+        }
+
+        .topbar {
+          flex-wrap: wrap;
+          padding: 12px 14px;
+        }
+
+        .canvas {
+          padding: 16px 12px 48px;
         }
 
         .editor {
-          padding: 14px;
-          font-size: 16px;
-        }
-      }
-
-      @media (max-width: 560px) {
-        .auth-screen {
-          padding: 12px;
+          padding: 24px 18px;
+          font-size: 17px;
         }
 
-        .auth-card {
-          border-radius: 14px;
-          padding: 18px;
-        }
-
-        .sidebar {
-          max-height: 42dvh;
+        .theme-grid {
+          grid-template-columns: repeat(2, 1fr);
         }
       }
     </style>
@@ -653,120 +1059,243 @@
 
   <body>
     <section id="authScreen" class="auth-screen">
+      <div class="auth-brand">
+        <div class="brand-mark" aria-hidden="true">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+            <path d="M12 20h9" />
+            <path d="M16.5 3.5a2.12 2.12 0 0 1 3 3L7 19l-4 1 1-4Z" />
+          </svg>
+        </div>
+        <h1>Simple Notepad</h1>
+        <p>A private multi-note app with sync, formatting, and installable app support.</p>
+      </div>
+
       <div class="auth-card">
-        <h1 id="authTitle">Sign In</h1>
-        <p id="authSubtitle">Your notes stay private to your account.</p>
+        <div class="auth-tabs" role="tablist">
+          <button id="tabSignIn" class="auth-tab active" type="button" role="tab">Sign In</button>
+          <button id="tabRegister" class="auth-tab" type="button" role="tab">Create Account</button>
+        </div>
         <form id="authForm" class="auth-form">
-          <input id="usernameInput" type="text" placeholder="Username" autocomplete="username" required />
-          <input id="passwordInput" type="password" placeholder="Password" autocomplete="current-password" required />
-          <button id="authSubmit" type="submit">Sign In</button>
+          <div class="field">
+            <span class="label-caps">Username</span>
+            <div class="field-input">
+              <input id="usernameInput" type="text" placeholder="Enter your username" autocomplete="username" required />
+            </div>
+          </div>
+          <div class="field">
+            <span class="label-caps">Password</span>
+            <div class="field-input">
+              <input id="passwordInput" type="password" placeholder="Enter your password" autocomplete="current-password" required />
+              <button id="passwordToggle" class="icon-button" type="button" aria-label="Show password" title="Show password">
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                  <path d="M2 12s3.5-7 10-7 10 7 10 7-3.5 7-10 7-10-7-10-7Z" />
+                  <circle cx="12" cy="12" r="3" />
+                </svg>
+              </button>
+            </div>
+          </div>
+          <button id="authSubmit" class="btn-primary" type="submit">Sign In</button>
         </form>
         <div id="authError" class="auth-error"></div>
-        <button id="authToggle" class="auth-toggle" type="button">Need an account? Register</button>
       </div>
     </section>
 
     <div id="modalBackdrop" class="modal-backdrop" hidden>
       <div class="modal-card">
         <h3 id="modalTitle"></h3>
-        <p id="modalMessage"></p>
-        <input id="modalInput" type="text" hidden />
-        <select id="modalSelect" hidden>
-          <option value="viewer">Viewer</option>
-          <option value="editor">Editor</option>
-        </select>
+        <p id="modalMessage" class="modal-sub"></p>
+        <input id="modalInput" type="text" hidden style="margin-bottom: 16px" />
         <div class="modal-actions">
-          <button id="modalCancel" type="button">Cancel</button>
-          <button id="modalConfirm" type="button">Confirm</button>
+          <button id="modalCancel" class="btn-ghost" type="button">Cancel</button>
+          <button id="modalConfirm" class="btn-primary" type="button">Confirm</button>
+        </div>
+      </div>
+    </div>
+
+    <div id="shareBackdrop" class="modal-backdrop" hidden>
+      <div class="modal-card">
+        <div class="modal-head">
+          <div>
+            <h3>Share with others</h3>
+            <p class="modal-sub">Manage who can access and edit this note.</p>
+          </div>
+          <button id="shareClose" class="icon-button" type="button" aria-label="Close">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M18 6 6 18M6 6l12 12" /></svg>
+          </button>
+        </div>
+        <span class="label-caps">Add people</span>
+        <div class="share-add-row">
+          <input id="shareUsernameInput" type="text" placeholder="Share with a username..." autocomplete="off" />
+          <select id="shareRoleSelect">
+            <option value="viewer">Viewer</option>
+            <option value="editor">Editor</option>
+          </select>
+          <button id="shareInviteButton" class="btn-primary" type="button">Invite</button>
+        </div>
+        <div id="shareError" class="share-error"></div>
+        <span class="label-caps">Current collaborators</span>
+        <div id="collabList" class="collab-list"></div>
+        <div class="modal-actions">
+          <button id="shareDone" class="btn-primary" type="button">Done</button>
         </div>
       </div>
     </div>
 
     <div id="settingsBackdrop" class="modal-backdrop" hidden>
       <div class="modal-card">
-        <h3>Account Settings</h3>
-        <p>Change your password for this account.</p>
-        <form id="settingsForm" class="settings-form">
-          <label>
-            Current Password
-            <input id="currentPasswordInput" type="password" autocomplete="current-password" required />
-          </label>
-          <label>
-            New Password
-            <input id="newPasswordInput" type="password" autocomplete="new-password" minlength="6" required />
-          </label>
-          <div id="settingsError" class="settings-error"></div>
-          <div class="modal-actions">
-            <button id="settingsCancel" type="button">Cancel</button>
-            <button id="settingsSave" type="submit">Save</button>
+        <div class="modal-head">
+          <div>
+            <h3>Settings</h3>
+            <p class="modal-sub">Account security and appearance.</p>
           </div>
-        </form>
+          <button id="settingsClose" class="icon-button" type="button" aria-label="Close">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M18 6 6 18M6 6l12 12" /></svg>
+          </button>
+        </div>
+
+        <div class="settings-section">
+          <span class="label-caps">Security</span>
+          <div class="settings-field" style="margin-bottom: 14px">
+            <label>Account</label>
+            <div id="settingsAccount" style="font-weight: 600"></div>
+          </div>
+          <form id="settingsForm" class="settings-form">
+            <div class="settings-field">
+              <label for="currentPasswordInput">Current password</label>
+              <input id="currentPasswordInput" type="password" autocomplete="current-password" required />
+            </div>
+            <div class="settings-field">
+              <label for="newPasswordInput">New password</label>
+              <input id="newPasswordInput" type="password" autocomplete="new-password" minlength="6" required />
+            </div>
+            <div id="settingsError" class="settings-error"></div>
+            <div class="modal-actions">
+              <button id="settingsSave" class="btn-primary" type="submit">Update password</button>
+            </div>
+          </form>
+        </div>
+
+        <div class="settings-section">
+          <span class="label-caps">Appearance</span>
+          <div id="themeGrid" class="theme-grid"></div>
+          <div class="bg-row">
+            <label for="backgroundPicker" style="font-size: 13px; color: var(--text-muted)">Editor background</label>
+            <input id="backgroundPicker" type="color" value="#fffdf8" />
+          </div>
+        </div>
+
+        <div class="settings-section" style="margin-bottom: 0">
+          <span class="label-caps">Typography</span>
+          <div class="font-row">
+            <span style="font-size: 13px; color: var(--text-muted)">Default font size</span>
+            <span id="fontSizeValue" class="font-value">18px</span>
+          </div>
+          <input id="fontSizeSlider" type="range" min="14" max="32" step="1" value="18" />
+          <div id="fontPreview" class="font-preview">
+            This is a live preview of your editor's typography. The Source Serif 4 font gives a paper-like feel for long writing sessions.
+          </div>
+        </div>
       </div>
     </div>
 
     <div id="appShell" class="app-shell" hidden>
       <aside class="sidebar">
-        <div class="sidebar-top">
-          <h1 class="sidebar-title">Notes</h1>
-          <button id="newNoteButton" class="new-note-button" type="button">New</button>
+        <div class="sidebar-brand">
+          <h1>Simple Notepad</h1>
+          <p>Private multi-note app with sync</p>
         </div>
-        <div id="noteList" class="note-list"></div>
+
+        <button id="newNoteButton" class="btn-primary new-note-button" type="button">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 5v14M5 12h14" /></svg>
+          New Note
+        </button>
+
+        <nav class="sidebar-nav" id="sidebarNav">
+          <button class="nav-item active" type="button" data-filter="all">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8Z" /><path d="M14 2v6h6" /></svg>
+            All Notes
+            <span class="nav-count" data-count="all"></span>
+          </button>
+          <button class="nav-item" type="button" data-filter="owned">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 2l2.5 6.5L21 9l-5 4.5L17.5 21 12 17l-5.5 4L8 13.5 3 9l6.5-.5Z" /></svg>
+            My Notes
+            <span class="nav-count" data-count="owned"></span>
+          </button>
+          <button class="nav-item" type="button" data-filter="shared">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2" /><circle cx="9" cy="7" r="4" /><path d="M23 21v-2a4 4 0 0 0-3-3.87M16 3.13a4 4 0 0 1 0 7.75" /></svg>
+            Shared
+            <span class="nav-count" data-count="shared"></span>
+          </button>
+        </nav>
+
+        <div class="note-list-section">
+          <span class="label-caps">Notes</span>
+          <div id="noteList" class="note-list"></div>
+        </div>
+
         <div class="sidebar-footer">
           <div class="sidebar-user-row">
-          <div id="userChip" class="user-chip"></div>
-            <button id="settingsButton" class="settings-button" type="button" aria-label="Settings" title="Settings">⚙</button>
+            <div id="sidebarAvatar" class="user-avatar"></div>
+            <div id="userChip" class="user-chip"></div>
           </div>
-          <button id="logoutButton" class="logout-button" type="button">Log Out</button>
+          <div class="sidebar-footer-actions">
+            <button id="settingsButton" class="btn-ghost" type="button">
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="3" /><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 1 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-4 0v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 1 1-2.83-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1 0-4h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 1 1 2.83-2.83l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 1 1 2.83 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1Z" /></svg>
+              Settings
+            </button>
+            <button id="logoutButton" class="btn-ghost" type="button">
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4" /><path d="m16 17 5-5-5-5M21 12H9" /></svg>
+              Log Out
+            </button>
+          </div>
         </div>
       </aside>
 
       <main class="main-panel">
-        <div class="toolbar">
-          <div class="note-heading">
-            <div class="note-heading-row">
+        <div class="topbar">
+          <div class="topbar-title-wrap">
+            <div class="topbar-title-row">
               <h2 id="activeNoteTitle">Loading...</h2>
-              <div class="note-heading-actions" aria-label="Note actions">
-                <button id="activeNoteRenameButton" type="button" hidden aria-label="Edit note name" title="Rename">
-                  <svg viewBox="0 0 24 24" aria-hidden="true" focusable="false">
-                    <path fill="currentColor" d="M3 17.25V21h3.75L17.8 9.95l-3.75-3.75L3 17.25zm2.92 2.33H5v-.92l9.06-9.06.92.92L5.92 19.58zM20.7 7.04a1 1 0 0 0 0-1.41L18.37 3.3a1 1 0 0 0-1.41 0l-1.83 1.83 3.75 3.75 1.82-1.84z"/>
-                  </svg>
-                </button>
-                <button id="activeNoteShareButton" type="button" hidden aria-label="Share note" title="Share">
-                  <svg viewBox="0 0 24 24" aria-hidden="true" focusable="false">
-                    <path fill="currentColor" d="M3.9 12a5.1 5.1 0 0 1 5.1-5.1h3v2h-3A3.1 3.1 0 0 0 5.9 12a3.1 3.1 0 0 0 3.1 3.1h3v2h-3A5.1 5.1 0 0 1 3.9 12zm6.1 1h4v-2h-4v2zm5-6.1h3A5.1 5.1 0 0 1 23.1 12a5.1 5.1 0 0 1-5.1 5.1h-3v-2h3A3.1 3.1 0 0 0 21.1 12a3.1 3.1 0 0 0-3.1-3.1h-3v-2z"/>
-                  </svg>
-                </button>
-              </div>
+              <button id="activeNoteRenameButton" class="icon-button" type="button" hidden aria-label="Rename note" title="Rename">
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 20h9" /><path d="M16.5 3.5a2.12 2.12 0 0 1 3 3L7 19l-4 1 1-4Z" /></svg>
+              </button>
             </div>
             <p id="activeNoteMeta">Choose a note to start editing.</p>
           </div>
-          <div class="toolbar-group">
-            <button id="boldToggle" type="button">B</button>
-            <button id="underlineToggle" type="button">U</button>
+          <div class="topbar-spacer"></div>
+          <div class="search-box">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="11" cy="11" r="8" /><path d="m21 21-4.3-4.3" /></svg>
+            <input id="searchInput" type="search" placeholder="Search notes..." autocomplete="off" />
           </div>
-          <div class="toolbar-divider" aria-hidden="true"></div>
-          <div class="toolbar-group">
-            <label>
-              Theme
-              <select id="themeSelect">
-                <option value="sand">Sand</option>
-                <option value="mist">Mist</option>
-                <option value="forest">Forest</option>
-                <option value="midnight">Midnight</option>
-              </select>
-            </label>
-          </div>
-          <div class="toolbar-divider" aria-hidden="true"></div>
-          <div class="toolbar-group">
-            <label>
-              Background
-              <input id="backgroundPicker" type="color" value="#fffdf8" />
-            </label>
+          <div class="topbar-actions">
+            <button id="activeNoteShareButton" class="share-button" type="button" hidden>
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="18" cy="5" r="3" /><circle cx="6" cy="12" r="3" /><circle cx="18" cy="19" r="3" /><path d="m8.6 13.5 6.8 4M15.4 6.5l-6.8 4" /></svg>
+              Share
+            </button>
           </div>
         </div>
-        <div class="editor-area">
-          <div id="editor" class="editor" contenteditable="true" data-placeholder="Start typing..."></div>
-          <div id="emptyState" class="empty-state" hidden>Create your first private note from the sidebar.</div>
+
+        <div class="canvas">
+          <div class="editor-column">
+            <div class="toolbar" id="toolbar">
+              <button id="boldToggle" class="toolbar-button" type="button" title="Bold"><b>B</b></button>
+              <button id="underlineToggle" class="toolbar-button" type="button" title="Underline"><u>U</u></button>
+              <div class="toolbar-divider" aria-hidden="true"></div>
+              <button id="bulletListButton" class="toolbar-button" type="button" title="Bullet list">
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M8 6h13M8 12h13M8 18h13" /><circle cx="3.5" cy="6" r="1.2" fill="currentColor" stroke="none" /><circle cx="3.5" cy="12" r="1.2" fill="currentColor" stroke="none" /><circle cx="3.5" cy="18" r="1.2" fill="currentColor" stroke="none" /></svg>
+              </button>
+              <button id="numberListButton" class="toolbar-button" type="button" title="Numbered list">
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M10 6h11M10 12h11M10 18h11M4 6h1v4M4 10h2M6 16H4a1 1 0 0 0-1 1c0 .5.4 1 1 1h1c.6 0 1 .4 1 1s-.4 1-1 1H4" /></svg>
+              </button>
+            </div>
+            <div class="editor-sheet">
+              <div id="editor" class="editor" contenteditable="false" data-placeholder="Start typing..."></div>
+            </div>
+            <div id="emptyState" class="empty-state" hidden>
+              <strong>No note selected</strong>
+              <span>Create your first private note from the sidebar.</span>
+            </div>
+          </div>
         </div>
       </main>
     </div>
@@ -775,45 +1304,127 @@
     const STORAGE_KEY = "simple-notepad-preferences";
     const SESSION_KEY = "simple-notepad-session";
 
+    const THEMES = {
+      sand: {
+        label: "Sand",
+        bg: "#f9f7f2",
+        surface: "#f2efe9",
+        surface2: "#ffffff",
+        text: "#1b1b1c",
+        textMuted: "#434749",
+        border: "rgba(27, 27, 28, 0.12)",
+        accent: "#d4a373",
+        accentContrast: "#1b1b1c",
+        activeFill: "rgba(212, 163, 115, 0.16)",
+        primaryBtnBg: "#181f21",
+        primaryBtnText: "#ffffff",
+        swatch: "linear-gradient(135deg, #f2efe9, #d4a373)",
+      },
+      mist: {
+        label: "Mist",
+        bg: "#f0f4f8",
+        surface: "#e1e8f0",
+        surface2: "#ffffff",
+        text: "#1d2733",
+        textMuted: "#48535f",
+        border: "rgba(29, 39, 51, 0.14)",
+        accent: "#5e81ac",
+        accentContrast: "#ffffff",
+        activeFill: "rgba(94, 129, 172, 0.16)",
+        primaryBtnBg: "#1d2733",
+        primaryBtnText: "#ffffff",
+        swatch: "linear-gradient(135deg, #e1e8f0, #5e81ac)",
+      },
+      forest: {
+        label: "Forest",
+        bg: "#1b2621",
+        surface: "#25332d",
+        surface2: "#2d3d36",
+        text: "#e7efe9",
+        textMuted: "#a9b8b0",
+        border: "rgba(231, 239, 233, 0.16)",
+        accent: "#8fb397",
+        accentContrast: "#10221a",
+        activeFill: "rgba(143, 179, 151, 0.18)",
+        primaryBtnBg: "#8fb397",
+        primaryBtnText: "#10221a",
+        swatch: "linear-gradient(135deg, #25332d, #8fb397)",
+      },
+      midnight: {
+        label: "Midnight",
+        bg: "#0b0e14",
+        surface: "#161b22",
+        surface2: "#1d242e",
+        text: "#e8edf3",
+        textMuted: "#9aa7b5",
+        border: "rgba(232, 237, 243, 0.16)",
+        accent: "#58a6ff",
+        accentContrast: "#04101f",
+        activeFill: "rgba(88, 166, 255, 0.18)",
+        primaryBtnBg: "#58a6ff",
+        primaryBtnText: "#04101f",
+        swatch: "linear-gradient(135deg, #161b22, #58a6ff)",
+      },
+    };
+
     const authScreen = document.getElementById("authScreen");
     const appShell = document.getElementById("appShell");
-    const authTitle = document.getElementById("authTitle");
-    const authSubtitle = document.getElementById("authSubtitle");
+    const tabSignIn = document.getElementById("tabSignIn");
+    const tabRegister = document.getElementById("tabRegister");
     const authForm = document.getElementById("authForm");
     const usernameInput = document.getElementById("usernameInput");
     const passwordInput = document.getElementById("passwordInput");
+    const passwordToggle = document.getElementById("passwordToggle");
     const authSubmit = document.getElementById("authSubmit");
-    const authToggle = document.getElementById("authToggle");
     const authError = document.getElementById("authError");
+
     const modalBackdrop = document.getElementById("modalBackdrop");
     const modalTitle = document.getElementById("modalTitle");
     const modalMessage = document.getElementById("modalMessage");
     const modalInput = document.getElementById("modalInput");
-    const modalSelect = document.getElementById("modalSelect");
     const modalCancel = document.getElementById("modalCancel");
     const modalConfirm = document.getElementById("modalConfirm");
+
+    const shareBackdrop = document.getElementById("shareBackdrop");
+    const shareClose = document.getElementById("shareClose");
+    const shareUsernameInput = document.getElementById("shareUsernameInput");
+    const shareRoleSelect = document.getElementById("shareRoleSelect");
+    const shareInviteButton = document.getElementById("shareInviteButton");
+    const shareError = document.getElementById("shareError");
+    const collabList = document.getElementById("collabList");
+    const shareDone = document.getElementById("shareDone");
+
     const settingsBackdrop = document.getElementById("settingsBackdrop");
+    const settingsClose = document.getElementById("settingsClose");
+    const settingsAccount = document.getElementById("settingsAccount");
     const settingsForm = document.getElementById("settingsForm");
     const currentPasswordInput = document.getElementById("currentPasswordInput");
     const newPasswordInput = document.getElementById("newPasswordInput");
     const settingsError = document.getElementById("settingsError");
-    const settingsCancel = document.getElementById("settingsCancel");
+    const themeGrid = document.getElementById("themeGrid");
+    const backgroundPicker = document.getElementById("backgroundPicker");
+    const fontSizeSlider = document.getElementById("fontSizeSlider");
+    const fontSizeValue = document.getElementById("fontSizeValue");
+    const fontPreview = document.getElementById("fontPreview");
 
     const editor = document.getElementById("editor");
     const noteList = document.getElementById("noteList");
     const newNoteButton = document.getElementById("newNoteButton");
+    const sidebarNav = document.getElementById("sidebarNav");
     const activeNoteTitle = document.getElementById("activeNoteTitle");
     const activeNoteMeta = document.getElementById("activeNoteMeta");
     const activeNoteRenameButton = document.getElementById("activeNoteRenameButton");
     const activeNoteShareButton = document.getElementById("activeNoteShareButton");
     const emptyState = document.getElementById("emptyState");
-    const themeSelect = document.getElementById("themeSelect");
-    const backgroundPicker = document.getElementById("backgroundPicker");
     const boldToggle = document.getElementById("boldToggle");
     const underlineToggle = document.getElementById("underlineToggle");
+    const bulletListButton = document.getElementById("bulletListButton");
+    const numberListButton = document.getElementById("numberListButton");
     const logoutButton = document.getElementById("logoutButton");
     const settingsButton = document.getElementById("settingsButton");
     const userChip = document.getElementById("userChip");
+    const sidebarAvatar = document.getElementById("sidebarAvatar");
+    const searchInput = document.getElementById("searchInput");
     const clientId = crypto.randomUUID();
 
     let ws;
@@ -830,18 +1441,19 @@
     let authMode = "login";
     let modalResolver = null;
     let modalMode = "text";
+    let searchQuery = "";
+    let noteFilter = "all";
+    let shareNoteId = null;
 
     let preferences = {
       theme: "sand",
-      background: "#fffdf8",
+      background: null,
       fontSize: 18,
     };
 
     const MIN_EDITOR_FONT_SIZE = 14;
     const MAX_EDITOR_FONT_SIZE = 32;
     const EDITOR_FONT_STEP = 1;
-
-    editor.contentEditable = "false";
 
     function saveSession(token) {
       sessionToken = token;
@@ -858,7 +1470,7 @@
     }
 
     function escapeHtml(value) {
-      return value
+      return String(value)
         .replaceAll("&", "&amp;")
         .replaceAll("<", "&lt;")
         .replaceAll(">", "&gt;")
@@ -887,11 +1499,25 @@
     }
 
     function setEditorMarkup(value) {
-      editor.innerHTML = normalizeStoredContent(value);
+      editor.innerHTML = sanitizeHtml(normalizeStoredContent(value));
     }
 
     function getEditorMarkup() {
       return editor.innerHTML;
+    }
+
+    function getInitials(name) {
+      if (!name) {
+        return "?";
+      }
+
+      const parts = name.trim().split(/\s+/);
+
+      if (parts.length === 1) {
+        return parts[0].slice(0, 2).toUpperCase();
+      }
+
+      return (parts[0][0] + parts[parts.length - 1][0]).toUpperCase();
     }
 
     function updateFormattingButtons() {
@@ -916,6 +1542,8 @@
       editor.contentEditable = canEdit ? "true" : "false";
       boldToggle.disabled = !canEdit;
       underlineToggle.disabled = !canEdit;
+      bulletListButton.disabled = !canEdit;
+      numberListButton.disabled = !canEdit;
     }
 
     function getReadableTextColor(backgroundColor) {
@@ -933,95 +1561,70 @@
       return brightness > 150 ? "#1b1b1b" : "#f7f7f7";
     }
 
+    function renderThemeCards() {
+      themeGrid.innerHTML = "";
+
+      Object.keys(THEMES).forEach((key) => {
+        const theme = THEMES[key];
+        const card = document.createElement("button");
+        card.type = "button";
+        card.className = "theme-card" + (key === preferences.theme ? " active" : "");
+        card.dataset.theme = key;
+
+        const swatch = document.createElement("div");
+        swatch.className = "theme-swatch";
+        swatch.style.background = theme.swatch;
+
+        const name = document.createElement("div");
+        name.className = "theme-name";
+        name.textContent = theme.label;
+
+        card.appendChild(swatch);
+        card.appendChild(name);
+        card.addEventListener("click", () => {
+          preferences.theme = key;
+          savePreferences();
+          applyPreferences();
+        });
+
+        themeGrid.appendChild(card);
+      });
+    }
+
     function applyPreferences() {
-      const themes = {
-        sand: {
-          pageBg: "#f3f0e8",
-          panelBg: "rgba(255, 255, 255, 0.88)",
-          sidebarBg: "rgba(255, 252, 244, 0.72)",
-          editorBg: preferences.background,
-          toolbarText: "#1f1a14",
-          sidebarText: "#1f1a14",
-          sidebarActiveBg: "rgba(123, 94, 46, 0.12)",
-          borderColor: "rgba(31, 26, 20, 0.12)",
-          controlBg: "rgba(255, 255, 255, 0.92)",
-          controlText: "#1f1a14",
-          controlActiveBg: "#1f1a14",
-          controlActiveText: "#ffffff",
-          pageAccent: "rgba(212, 170, 98, 0.18)",
-          pageGradientEnd: "#ece7dc",
-        },
-        mist: {
-          pageBg: "#dce8f2",
-          panelBg: "rgba(240, 247, 252, 0.9)",
-          sidebarBg: "rgba(228, 239, 248, 0.82)",
-          editorBg: preferences.background,
-          toolbarText: "#1d3142",
-          sidebarText: "#1d3142",
-          sidebarActiveBg: "rgba(50, 92, 122, 0.16)",
-          borderColor: "rgba(29, 49, 66, 0.16)",
-          controlBg: "#e2edf6",
-          controlText: "#1d3142",
-          controlActiveBg: "#325c7a",
-          controlActiveText: "#ffffff",
-          pageAccent: "rgba(132, 176, 214, 0.28)",
-          pageGradientEnd: "#f4f8fb",
-        },
-        forest: {
-          pageBg: "#d9e6d5",
-          panelBg: "rgba(241, 247, 238, 0.9)",
-          sidebarBg: "rgba(224, 236, 221, 0.82)",
-          editorBg: preferences.background,
-          toolbarText: "#203827",
-          sidebarText: "#203827",
-          sidebarActiveBg: "rgba(53, 88, 68, 0.16)",
-          borderColor: "rgba(32, 56, 39, 0.16)",
-          controlBg: "#e3efe1",
-          controlText: "#203827",
-          controlActiveBg: "#355844",
-          controlActiveText: "#ffffff",
-          pageAccent: "rgba(107, 158, 118, 0.24)",
-          pageGradientEnd: "#edf5ea",
-        },
-        midnight: {
-          pageBg: "#1a1f2b",
-          panelBg: "rgba(34, 40, 56, 0.88)",
-          sidebarBg: "rgba(24, 29, 41, 0.86)",
-          editorBg: preferences.background,
-          toolbarText: "#f3f5fa",
-          sidebarText: "#f3f5fa",
-          sidebarActiveBg: "rgba(243, 245, 250, 0.14)",
-          borderColor: "rgba(243, 245, 250, 0.16)",
-          controlBg: "#363f57",
-          controlText: "#f3f5fa",
-          controlActiveBg: "#f3f5fa",
-          controlActiveText: "#1a1f2b",
-          pageAccent: "rgba(111, 132, 202, 0.24)",
-          pageGradientEnd: "#111522",
-        },
-      };
+      const theme = THEMES[preferences.theme] || THEMES.sand;
+      const root = document.documentElement.style;
+      const editorBg = preferences.background || theme.surface2;
 
-      const selectedTheme = themes[preferences.theme] || themes.sand;
+      root.setProperty("--bg", theme.bg);
+      root.setProperty("--surface", theme.surface);
+      root.setProperty("--surface-2", theme.surface2);
+      root.setProperty("--editor-bg", editorBg);
+      root.setProperty("--editor-text", getReadableTextColor(editorBg));
+      root.setProperty("--text", theme.text);
+      root.setProperty("--text-muted", theme.textMuted);
+      root.setProperty("--border", theme.border);
+      root.setProperty("--accent", theme.accent);
+      root.setProperty("--accent-contrast", theme.accentContrast);
+      root.setProperty("--active-fill", theme.activeFill);
+      root.setProperty("--primary-btn-bg", theme.primaryBtnBg);
+      root.setProperty("--primary-btn-text", theme.primaryBtnText);
 
-      document.documentElement.style.setProperty("--page-bg", selectedTheme.pageBg);
-      document.documentElement.style.setProperty("--panel-bg", selectedTheme.panelBg);
-      document.documentElement.style.setProperty("--sidebar-bg", selectedTheme.sidebarBg);
-      document.documentElement.style.setProperty("--editor-bg", selectedTheme.editorBg);
-      document.documentElement.style.setProperty("--editor-text", getReadableTextColor(preferences.background));
-      document.documentElement.style.setProperty("--toolbar-text", selectedTheme.toolbarText);
-      document.documentElement.style.setProperty("--sidebar-text", selectedTheme.sidebarText);
-      document.documentElement.style.setProperty("--sidebar-active-bg", selectedTheme.sidebarActiveBg);
-      document.documentElement.style.setProperty("--border-color", selectedTheme.borderColor);
-      document.documentElement.style.setProperty("--control-bg", selectedTheme.controlBg);
-      document.documentElement.style.setProperty("--control-text", selectedTheme.controlText);
-      document.documentElement.style.setProperty("--control-active-bg", selectedTheme.controlActiveBg);
-      document.documentElement.style.setProperty("--control-active-text", selectedTheme.controlActiveText);
-      document.documentElement.style.setProperty("--page-accent", selectedTheme.pageAccent);
-      document.documentElement.style.setProperty("--page-gradient-end", selectedTheme.pageGradientEnd);
       editor.style.fontSize = `${preferences.fontSize}px`;
+      fontPreview.style.fontSize = `${preferences.fontSize}px`;
+      fontSizeValue.textContent = `${preferences.fontSize}px`;
+      fontSizeSlider.value = String(preferences.fontSize);
+      backgroundPicker.value = editorBg;
 
-      themeSelect.value = preferences.theme;
-      backgroundPicker.value = preferences.background;
+      themeGrid.querySelectorAll(".theme-card").forEach((card) => {
+        card.classList.toggle("active", card.dataset.theme === preferences.theme);
+      });
+
+      const meta = document.querySelector('meta[name="theme-color"]');
+      if (meta) {
+        meta.setAttribute("content", theme.bg);
+      }
+
       updateFormattingButtons();
     }
 
@@ -1053,25 +1656,24 @@
         }
       }
 
+      if (!THEMES[preferences.theme]) {
+        preferences.theme = "sand";
+      }
+
       preferences.fontSize = Number.isFinite(Number(preferences.fontSize))
         ? Math.max(MIN_EDITOR_FONT_SIZE, Math.min(MAX_EDITOR_FONT_SIZE, Number(preferences.fontSize)))
         : 18;
 
+      renderThemeCards();
       applyPreferences();
     }
 
     function setAuthMode(mode) {
       authMode = mode;
-      authTitle.textContent = mode === "login" ? "Sign In" : "Create Account";
-      authSubtitle.textContent =
-        mode === "login"
-          ? "Your notes stay private to your account."
-          : "Create a username and password to keep your notes private.";
-      authSubmit.textContent = mode === "login" ? "Sign In" : "Register";
-      authToggle.textContent =
-        mode === "login" ? "Need an account? Register" : "Already have an account? Sign In";
-      passwordInput.autocomplete =
-        mode === "login" ? "current-password" : "new-password";
+      tabSignIn.classList.toggle("active", mode === "login");
+      tabRegister.classList.toggle("active", mode === "register");
+      authSubmit.textContent = mode === "login" ? "Sign In" : "Create Account";
+      passwordInput.autocomplete = mode === "login" ? "current-password" : "new-password";
       authError.textContent = "";
     }
 
@@ -1097,6 +1699,8 @@
     function openSettingsModal() {
       settingsError.textContent = "";
       settingsForm.reset();
+      settingsAccount.textContent = currentUser ? currentUser.username : "";
+      applyPreferences();
       settingsBackdrop.hidden = false;
       currentPasswordInput.focus();
     }
@@ -1116,7 +1720,6 @@
       modalTitle.textContent = title;
       modalMessage.textContent = message;
       modalInput.hidden = false;
-      modalSelect.hidden = true;
       modalInput.value = value;
       modalConfirm.textContent = confirmLabel;
       modalConfirm.classList.remove("danger-button");
@@ -1134,38 +1737,12 @@
       modalTitle.textContent = title;
       modalMessage.textContent = message;
       modalInput.hidden = true;
-      modalSelect.hidden = true;
       modalInput.value = "";
       modalConfirm.textContent = confirmLabel;
       modalConfirm.classList.add("danger-button");
       modalBackdrop.hidden = false;
       modalMode = "confirm";
       modalConfirm.focus();
-
-      return new Promise((resolve) => {
-        modalResolver = resolve;
-      });
-    }
-
-    function openShareModal({
-      title,
-      message,
-      username = "",
-      role = "viewer",
-      confirmLabel = "Share",
-    }) {
-      modalTitle.textContent = title;
-      modalMessage.textContent = message;
-      modalInput.hidden = false;
-      modalInput.value = username;
-      modalSelect.hidden = false;
-      modalSelect.value = role;
-      modalConfirm.textContent = confirmLabel;
-      modalConfirm.classList.remove("danger-button");
-      modalBackdrop.hidden = false;
-      modalMode = "share";
-      modalInput.focus();
-      modalInput.select();
 
       return new Promise((resolve) => {
         modalResolver = resolve;
@@ -1182,14 +1759,6 @@
         return;
       }
 
-      if (modalMode === "share") {
-        closeModal({
-          username: modalInput.value.trim(),
-          role: (modalSelect.value || "viewer").trim().toLowerCase(),
-        });
-        return;
-      }
-
       closeModal(modalInput.value.trim());
     });
 
@@ -1202,15 +1771,6 @@
     modalInput.addEventListener("keydown", (event) => {
       if (event.key === "Enter") {
         event.preventDefault();
-
-        if (modalMode === "share") {
-          closeModal({
-            username: modalInput.value.trim(),
-            role: (modalSelect.value || "viewer").trim().toLowerCase(),
-          });
-          return;
-        }
-
         closeModal(modalInput.value.trim());
       }
 
@@ -1227,15 +1787,17 @@
       return new Date(updatedAt).toLocaleString();
     }
 
-
     function setEmptyState(isEmpty) {
       emptyState.hidden = !isEmpty;
-      editor.hidden = isEmpty;
+      editor.parentElement.hidden = isEmpty;
+      document.getElementById("toolbar").hidden = isEmpty;
 
       if (isEmpty) {
         editor.contentEditable = "false";
         boldToggle.disabled = true;
         underlineToggle.disabled = true;
+        bulletListButton.disabled = true;
+        numberListButton.disabled = true;
         return;
       }
 
@@ -1261,7 +1823,7 @@
       activeNoteVersion = note.version || 0;
       activeNoteAccessRole = note.accessRole || null;
       activeNoteTitle.textContent = note.title;
-      const roleLabel = note.accessRole === "viewer" ? " - View only" : "";
+      const roleLabel = note.accessRole === "viewer" ? " · View only" : "";
       activeNoteMeta.textContent = `Last updated ${formatUpdatedAt(note.updatedAt)}${roleLabel}`;
       activeNoteRenameButton.hidden = !canEditNoteRole(note.accessRole);
       activeNoteShareButton.hidden = note.accessRole !== "owner";
@@ -1298,7 +1860,9 @@
       activeNoteVersion = 0;
       activeNoteAccessRole = null;
       userChip.textContent = "";
+      sidebarAvatar.textContent = "";
       closeSettingsModal();
+      shareBackdrop.hidden = true;
       setActiveNote(null);
     }
 
@@ -1380,12 +1944,61 @@
       }
     }
 
+    function matchesFilter(note) {
+      if (noteFilter === "owned") {
+        return note.accessRole === "owner";
+      }
+
+      if (noteFilter === "shared") {
+        return note.accessRole !== "owner";
+      }
+
+      return true;
+    }
+
+    function updateNavCounts() {
+      const counts = {
+        all: notes.length,
+        owned: notes.filter((note) => note.accessRole === "owner").length,
+        shared: notes.filter((note) => note.accessRole !== "owner").length,
+      };
+
+      sidebarNav.querySelectorAll("[data-count]").forEach((el) => {
+        const value = counts[el.dataset.count] ?? 0;
+        el.textContent = value ? String(value) : "";
+      });
+    }
+
     function renderNotes() {
       noteList.innerHTML = "";
+      updateNavCounts();
 
-      notes.forEach((note) => {
+      const query = searchQuery.trim().toLowerCase();
+      const visibleNotes = notes.filter((note) => {
+        if (!matchesFilter(note)) {
+          return false;
+        }
+
+        if (query && !(note.title || "").toLowerCase().includes(query)) {
+          return false;
+        }
+
+        return true;
+      });
+
+      if (visibleNotes.length === 0) {
+        const hint = document.createElement("div");
+        hint.className = "note-empty-hint";
+        hint.textContent = query
+          ? "No notes match your search."
+          : "No notes here yet.";
+        noteList.appendChild(hint);
+        return;
+      }
+
+      visibleNotes.forEach((note) => {
         const canDelete = note.accessRole === "owner";
-        const roleSuffix = note.accessRole === "viewer" ? " - View only" : "";
+        const roleSuffix = note.accessRole === "viewer" ? " · View only" : "";
 
         const item = document.createElement("div");
         item.className = "note-item";
@@ -1397,10 +2010,8 @@
         selectButton.type = "button";
         selectButton.className = "note-select-button";
         selectButton.innerHTML = `
-          <div class="note-item-content">
-            <span class="note-item-title">${note.title}</span>
-            <span class="note-item-meta">${formatUpdatedAt(note.updatedAt)}${roleSuffix}</span>
-          </div>
+          <span class="note-item-title">${escapeHtml(note.title || "Untitled Note")}</span>
+          <span class="note-item-meta">${escapeHtml(formatUpdatedAt(note.updatedAt))}${escapeHtml(roleSuffix)}</span>
         `;
 
         selectButton.addEventListener("click", () => {
@@ -1413,7 +2024,7 @@
         deleteButton.title = "Delete";
         deleteButton.setAttribute("aria-label", "Delete note");
         deleteButton.hidden = !canDelete;
-        deleteButton.innerHTML = "🗑";
+        deleteButton.innerHTML = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 6h18M8 6V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2m2 0v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6" /></svg>';
 
         deleteButton.addEventListener("click", async (event) => {
           event.preventDefault();
@@ -1451,6 +2062,12 @@
       return response.json();
     }
 
+    function setSignedInUser(user) {
+      currentUser = user;
+      userChip.textContent = `Signed in as ${user.username}`;
+      sidebarAvatar.textContent = getInitials(user.username);
+    }
+
     async function hydrateSession() {
       if (!sessionToken) {
         showAuthScreen();
@@ -1459,8 +2076,7 @@
 
       try {
         const data = await fetchJson("/api/auth/me");
-        currentUser = data.user;
-        userChip.textContent = `Signed in as ${currentUser.username}`;
+        setSignedInUser(data.user);
         showApp();
         connect();
       } catch (_error) {
@@ -1474,50 +2090,150 @@
       setActiveNote(data.note);
     }
 
-    async function shareNoteById(noteId) {
-      const result = await openShareModal({
-        title: "Share Note",
-        message: "Choose who to share with and their access level.",
-        role: "viewer",
-        confirmLabel: "Share",
-      });
+    function renderCollaborators(collaborators) {
+      collabList.innerHTML = "";
 
-      if (!result) {
+      const ownerRow = document.createElement("div");
+      ownerRow.className = "collab-row";
+      ownerRow.innerHTML = `
+        <div class="user-avatar">${escapeHtml(getInitials(currentUser ? currentUser.username : "?"))}</div>
+        <div class="collab-meta">
+          <div class="collab-name">${escapeHtml(currentUser ? currentUser.username : "You")} (You)</div>
+        </div>
+        <div class="collab-role">owner</div>
+      `;
+      collabList.appendChild(ownerRow);
+
+      if (!collaborators.length) {
+        const hint = document.createElement("div");
+        hint.className = "collab-sub";
+        hint.textContent = "Not shared with anyone yet.";
+        collabList.appendChild(hint);
         return;
       }
 
-      const username = (result.username || "").trim();
-      const role = (result.role || "viewer").trim().toLowerCase();
+      collaborators.forEach((collaborator) => {
+        const row = document.createElement("div");
+        row.className = "collab-row";
 
-      if (!username) {
+        const avatar = document.createElement("div");
+        avatar.className = "user-avatar";
+        avatar.textContent = getInitials(collaborator.username);
+
+        const meta = document.createElement("div");
+        meta.className = "collab-meta";
+        const name = document.createElement("div");
+        name.className = "collab-name";
+        name.textContent = collaborator.username;
+        meta.appendChild(name);
+
+        const roleSelect = document.createElement("select");
+        roleSelect.innerHTML = `
+          <option value="viewer">viewer</option>
+          <option value="editor">editor</option>
+        `;
+        roleSelect.value = collaborator.role;
+        roleSelect.style.width = "auto";
+        roleSelect.addEventListener("change", async () => {
+          await inviteCollaborator(collaborator.username, roleSelect.value);
+        });
+
+        const removeButton = document.createElement("button");
+        removeButton.type = "button";
+        removeButton.className = "icon-button collab-remove";
+        removeButton.title = "Remove access";
+        removeButton.setAttribute("aria-label", "Remove access");
+        removeButton.innerHTML = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M18 6 6 18M6 6l12 12" /></svg>';
+        removeButton.addEventListener("click", async () => {
+          await removeCollaborator(collaborator.userId);
+        });
+
+        row.appendChild(avatar);
+        row.appendChild(meta);
+        row.appendChild(roleSelect);
+        row.appendChild(removeButton);
+        collabList.appendChild(row);
+      });
+    }
+
+    async function loadCollaborators() {
+      if (!shareNoteId) {
         return;
       }
 
       try {
-        await fetchJson(`/api/notes/${noteId}/share`, {
+        const data = await fetchJson(`/api/notes/${shareNoteId}/shares`);
+        renderCollaborators(data.collaborators || []);
+      } catch (error) {
+        shareError.textContent = error.message || "Could not load collaborators.";
+      }
+    }
+
+    async function inviteCollaborator(username, role) {
+      const cleanUsername = (username || "").trim();
+      const cleanRole = (role || "viewer").trim().toLowerCase();
+      shareError.textContent = "";
+
+      if (!cleanUsername) {
+        shareError.textContent = "Enter a username to share with.";
+        return;
+      }
+
+      try {
+        await fetchJson(`/api/notes/${shareNoteId}/share`, {
           method: "POST",
-          body: JSON.stringify({ username, role }),
+          body: JSON.stringify({ username: cleanUsername, role: cleanRole }),
         });
 
-        alert(`Shared with ${username} as ${role}.`);
+        shareUsernameInput.value = "";
+        await loadCollaborators();
         await refreshNotesList();
       } catch (error) {
-        alert(error.message || "Could not share the note.");
+        shareError.textContent = error.message || "Could not share the note.";
       }
+    }
+
+    async function removeCollaborator(userId) {
+      shareError.textContent = "";
+
+      try {
+        await fetchJson(`/api/notes/${shareNoteId}/share/${userId}`, {
+          method: "DELETE",
+        });
+
+        await loadCollaborators();
+        await refreshNotesList();
+      } catch (error) {
+        shareError.textContent = error.message || "Could not remove access.";
+      }
+    }
+
+    function openShareDialog(noteId) {
+      shareNoteId = noteId;
+      shareError.textContent = "";
+      shareUsernameInput.value = "";
+      shareRoleSelect.value = "viewer";
+      collabList.innerHTML = "";
+      shareBackdrop.hidden = false;
+      loadCollaborators();
+      shareUsernameInput.focus();
+    }
+
+    function closeShareDialog() {
+      shareBackdrop.hidden = true;
+      shareNoteId = null;
     }
 
     async function renameNoteById(noteId) {
       const noteSummary = notes.find((note) => note.id === noteId);
 
       if (!noteSummary || !canEditNoteRole(noteSummary.accessRole)) {
-        alert("You only have view access to this note.");
         return;
       }
 
-      const currentTitle =
-        noteSummary.title || "Untitled Note";
+      const currentTitle = noteSummary.title || "Untitled Note";
       const nextTitle = await openTextModal({
-        title: "Rename Note",
+        title: "Rename note",
         message: "Choose a new name for this note.",
         value: currentTitle,
         confirmLabel: "Save",
@@ -1538,6 +2254,8 @@
           title: data.note.title,
           version: data.note.version,
           updatedAt: data.note.updatedAt,
+          accessRole: data.note.accessRole,
+          isOwner: data.note.isOwner,
         });
 
         if (activeNoteId === noteId) {
@@ -1546,7 +2264,11 @@
           renderNotes();
         }
       } catch (_error) {
-        alert("Could not rename the note.");
+        await openConfirmModal({
+          title: "Rename failed",
+          message: "Could not rename the note.",
+          confirmLabel: "OK",
+        });
       }
     }
 
@@ -1554,14 +2276,12 @@
       const noteSummary = notes.find((note) => note.id === noteId);
 
       if (!noteSummary || noteSummary.accessRole !== "owner") {
-        alert("Only the owner can delete this note.");
         return;
       }
 
-      const noteTitle =
-        noteSummary.title || "this note";
+      const noteTitle = noteSummary.title || "this note";
       const confirmed = await openConfirmModal({
-        title: "Delete Note",
+        title: "Delete note",
         message: `Delete "${noteTitle}"? This cannot be undone.`,
         confirmLabel: "Delete",
       });
@@ -1590,7 +2310,11 @@
           renderNotes();
         }
       } catch (_error) {
-        alert("Could not delete the note.");
+        await openConfirmModal({
+          title: "Delete failed",
+          message: "Could not delete the note.",
+          confirmLabel: "OK",
+        });
       }
     }
 
@@ -1667,8 +2391,7 @@
         const data = JSON.parse(event.data);
 
         if (data.type === "init") {
-          currentUser = data.user;
-          userChip.textContent = `Signed in as ${currentUser.username}`;
+          setSignedInUser(data.user);
           notes = data.notes || [];
           renderNotes();
           setActiveNote(data.activeNote);
@@ -1693,7 +2416,9 @@
             if (activeSummary && activeSummary.accessRole !== activeNoteAccessRole) {
               activeNoteAccessRole = activeSummary.accessRole || null;
               syncActiveEditorAccess();
-              const roleSuffix = activeNoteAccessRole === "viewer" ? " - View only" : "";
+              activeNoteShareButton.hidden = activeNoteAccessRole !== "owner";
+              activeNoteRenameButton.hidden = !canEditNoteRole(activeNoteAccessRole);
+              const roleSuffix = activeNoteAccessRole === "viewer" ? " · View only" : "";
               activeNoteMeta.textContent = `Last updated ${formatUpdatedAt(activeSummary.updatedAt)}${roleSuffix}`;
             }
           }
@@ -1711,7 +2436,7 @@
           upsertNoteSummary(data.note);
 
           if (data.note.id === activeNoteId) {
-            const roleSuffix = activeNoteAccessRole === "viewer" ? " - View only" : "";
+            const roleSuffix = activeNoteAccessRole === "viewer" ? " · View only" : "";
             activeNoteTitle.textContent = data.note.title;
             activeNoteMeta.textContent = `Last updated ${formatUpdatedAt(data.note.updatedAt)}${roleSuffix}`;
           }
@@ -1758,7 +2483,7 @@
           if (data.noteId === activeNoteId) {
             if (data.sourceClientId === clientId) {
               activeNoteVersion = data.version || activeNoteVersion;
-              const roleSuffix = activeNoteAccessRole === "viewer" ? " - View only" : "";
+              const roleSuffix = activeNoteAccessRole === "viewer" ? " · View only" : "";
               activeNoteMeta.textContent = `Last updated ${formatUpdatedAt(data.updatedAt)}${roleSuffix}`;
               renderNotes();
               return;
@@ -1766,7 +2491,7 @@
 
             if ((data.version || 0) > activeNoteVersion) {
               activeNoteVersion = data.version || 0;
-              const roleSuffix = activeNoteAccessRole === "viewer" ? " - View only" : "";
+              const roleSuffix = activeNoteAccessRole === "viewer" ? " · View only" : "";
               activeNoteMeta.textContent = `Last updated ${formatUpdatedAt(data.updatedAt)}${roleSuffix}`;
               setEditorMarkup(data.text || "");
               updateFormattingButtons();
@@ -1805,6 +2530,8 @@
         editor.contentEditable = "false";
         boldToggle.disabled = true;
         underlineToggle.disabled = true;
+        bulletListButton.disabled = true;
+        numberListButton.disabled = true;
         scheduleReconnect();
       };
 
@@ -1813,14 +2540,23 @@
       };
     }
 
+    tabSignIn.addEventListener("click", () => setAuthMode("login"));
+    tabRegister.addEventListener("click", () => setAuthMode("register"));
+
+    passwordToggle.addEventListener("click", () => {
+      const isHidden = passwordInput.type === "password";
+      passwordInput.type = isHidden ? "text" : "password";
+      passwordToggle.setAttribute("aria-label", isHidden ? "Hide password" : "Show password");
+      passwordToggle.title = isHidden ? "Hide password" : "Show password";
+    });
+
     authForm.addEventListener("submit", async (event) => {
       event.preventDefault();
       authError.textContent = "";
 
       const username = usernameInput.value.trim();
       const password = passwordInput.value;
-      const endpoint =
-        authMode === "login" ? "/api/auth/login" : "/api/auth/register";
+      const endpoint = authMode === "login" ? "/api/auth/login" : "/api/auth/register";
 
       try {
         const data = await fetchJson(endpoint, {
@@ -1829,18 +2565,13 @@
         });
 
         saveSession(data.token);
-        currentUser = data.user;
-        userChip.textContent = `Signed in as ${currentUser.username}`;
+        setSignedInUser(data.user);
         passwordInput.value = "";
         showApp();
         connect();
       } catch (error) {
         authError.textContent = error.message;
       }
-    });
-
-    authToggle.addEventListener("click", () => {
-      setAuthMode(authMode === "login" ? "register" : "login");
     });
 
     editor.addEventListener("input", () => {
@@ -1877,39 +2608,21 @@
       adjustEditorFontSize(event.deltaY < 0 ? 1 : -1);
     }, { passive: false });
 
-    themeSelect.addEventListener("change", () => {
-      preferences.theme = themeSelect.value;
-      savePreferences();
-      applyPreferences();
-    });
-
-    backgroundPicker.addEventListener("input", () => {
-      preferences.background = backgroundPicker.value;
-      savePreferences();
-      applyPreferences();
-    });
-
-    boldToggle.addEventListener("click", () => {
+    function runEditorCommand(command) {
       if (!activeNoteId || !canEditActiveNote()) {
         return;
       }
 
       editor.focus();
-      document.execCommand("bold");
+      document.execCommand(command);
       updateFormattingButtons();
       queueSend();
-    });
+    }
 
-    underlineToggle.addEventListener("click", () => {
-      if (!activeNoteId || !canEditActiveNote()) {
-        return;
-      }
-
-      editor.focus();
-      document.execCommand("underline");
-      updateFormattingButtons();
-      queueSend();
-    });
+    boldToggle.addEventListener("click", () => runEditorCommand("bold"));
+    underlineToggle.addEventListener("click", () => runEditorCommand("underline"));
+    bulletListButton.addEventListener("click", () => runEditorCommand("insertUnorderedList"));
+    numberListButton.addEventListener("click", () => runEditorCommand("insertOrderedList"));
 
     activeNoteRenameButton.addEventListener("click", async () => {
       if (!activeNoteId || !canEditActiveNote()) {
@@ -1919,17 +2632,55 @@
       await renameNoteById(activeNoteId);
     });
 
-    activeNoteShareButton.addEventListener("click", async () => {
+    activeNoteShareButton.addEventListener("click", () => {
       if (!activeNoteId || activeNoteAccessRole !== "owner") {
         return;
       }
 
-      await shareNoteById(activeNoteId);
+      openShareDialog(activeNoteId);
+    });
+
+    shareInviteButton.addEventListener("click", () => {
+      inviteCollaborator(shareUsernameInput.value, shareRoleSelect.value);
+    });
+
+    shareUsernameInput.addEventListener("keydown", (event) => {
+      if (event.key === "Enter") {
+        event.preventDefault();
+        inviteCollaborator(shareUsernameInput.value, shareRoleSelect.value);
+      }
+    });
+
+    shareClose.addEventListener("click", closeShareDialog);
+    shareDone.addEventListener("click", closeShareDialog);
+    shareBackdrop.addEventListener("click", (event) => {
+      if (event.target === shareBackdrop) {
+        closeShareDialog();
+      }
+    });
+
+    searchInput.addEventListener("input", () => {
+      searchQuery = searchInput.value;
+      renderNotes();
+    });
+
+    sidebarNav.addEventListener("click", (event) => {
+      const button = event.target.closest(".nav-item");
+
+      if (!button) {
+        return;
+      }
+
+      noteFilter = button.dataset.filter || "all";
+      sidebarNav.querySelectorAll(".nav-item").forEach((item) => {
+        item.classList.toggle("active", item === button);
+      });
+      renderNotes();
     });
 
     newNoteButton.addEventListener("click", async () => {
       const title = await openTextModal({
-        title: "New Note",
+        title: "New note",
         message: "Give your new note a name.",
         confirmLabel: "Create",
       });
@@ -1949,10 +2700,16 @@
           title: data.note.title,
           version: data.note.version,
           updatedAt: data.note.updatedAt,
+          accessRole: data.note.accessRole,
+          isOwner: data.note.isOwner,
         });
         setActiveNote(data.note);
       } catch (_error) {
-        alert("Could not create the note.");
+        await openConfirmModal({
+          title: "Create failed",
+          message: "Could not create the note.",
+          confirmLabel: "OK",
+        });
       }
     });
 
@@ -1964,18 +2721,27 @@
       openSettingsModal();
     });
 
-    settingsCancel.addEventListener("click", () => {
-      closeSettingsModal();
-    });
-
+    settingsClose.addEventListener("click", closeSettingsModal);
     settingsBackdrop.addEventListener("click", (event) => {
       if (event.target === settingsBackdrop) {
         closeSettingsModal();
       }
     });
 
-    document.addEventListener("click", (event) => {
-      // No-op: previously used to close per-note action menus in the sidebar.
+    backgroundPicker.addEventListener("input", () => {
+      preferences.background = backgroundPicker.value;
+      savePreferences();
+      applyPreferences();
+    });
+
+    fontSizeSlider.addEventListener("input", () => {
+      const nextSize = Math.max(
+        MIN_EDITOR_FONT_SIZE,
+        Math.min(MAX_EDITOR_FONT_SIZE, Number(fontSizeSlider.value) || preferences.fontSize),
+      );
+      preferences.fontSize = nextSize;
+      savePreferences();
+      applyPreferences();
     });
 
     settingsForm.addEventListener("submit", async (event) => {
@@ -1992,10 +2758,18 @@
         });
 
         saveSession(data.token);
-        currentUser = data.user;
-        userChip.textContent = `Signed in as ${currentUser.username}`;
-        closeSettingsModal();
+        setSignedInUser(data.user);
+        settingsForm.reset();
+        settingsError.textContent = "";
+        settingsAccount.textContent = data.user.username;
+        settingsError.style.color = "var(--accent)";
+        settingsError.textContent = "Password updated.";
+        setTimeout(() => {
+          settingsError.textContent = "";
+          settingsError.style.color = "var(--danger)";
+        }, 2000);
       } catch (error) {
+        settingsError.style.color = "var(--danger)";
         settingsError.textContent = error.message;
       }
     });
@@ -2003,6 +2777,18 @@
     logoutButton.addEventListener("click", () => {
       clearSessionState();
       showAuthScreen();
+    });
+
+    document.addEventListener("keydown", (event) => {
+      if (event.key !== "Escape") {
+        return;
+      }
+
+      if (!shareBackdrop.hidden) {
+        closeShareDialog();
+      } else if (!settingsBackdrop.hidden) {
+        closeSettingsModal();
+      }
     });
 
     syncIntervalId = setInterval(() => {
