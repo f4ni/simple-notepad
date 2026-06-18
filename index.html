@@ -42,7 +42,7 @@
         --radius-md: 0.75rem;
         --radius-lg: 1rem;
         --sidebar-width: 280px;
-        --editor-max-width: 800px;
+        --editor-max-width: 920px;
       }
 
       * {
@@ -276,6 +276,7 @@
       }
 
       .sidebar {
+        position: relative;
         display: flex;
         flex-direction: column;
         gap: 18px;
@@ -284,6 +285,48 @@
         overflow: hidden;
         background: var(--surface);
         border-right: 1px solid var(--border);
+      }
+
+      .sidebar-resizer {
+        position: absolute;
+        top: 0;
+        right: 0;
+        bottom: 0;
+        width: 8px;
+        transform: translateX(50%);
+        cursor: col-resize;
+        z-index: 15;
+        touch-action: none;
+      }
+
+      .sidebar-resizer::after {
+        content: "";
+        position: absolute;
+        top: 0;
+        bottom: 0;
+        left: 50%;
+        width: 2px;
+        transform: translateX(-50%);
+        background: transparent;
+        transition: background 120ms ease;
+      }
+
+      .sidebar-resizer:hover::after,
+      .body-resizing .sidebar-resizer::after {
+        background: var(--accent);
+      }
+
+      .app-shell.sidebar-collapsed {
+        grid-template-columns: 1fr;
+      }
+
+      .app-shell.sidebar-collapsed .sidebar {
+        display: none;
+      }
+
+      .body-resizing {
+        cursor: col-resize;
+        user-select: none;
       }
 
       .sidebar-brand h1 {
@@ -1035,6 +1078,10 @@
           max-height: 42dvh;
         }
 
+        .sidebar-resizer {
+          display: none;
+        }
+
         .search-box {
           width: 100%;
         }
@@ -1260,15 +1307,19 @@
             </button>
           </div>
         </div>
+        <div id="sidebarResizer" class="sidebar-resizer" title="Drag to resize" aria-hidden="true"></div>
       </aside>
 
       <main class="main-panel">
         <div class="topbar">
+          <button id="sidebarToggle" class="icon-button" type="button" aria-label="Toggle sidebar" title="Toggle sidebar">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="4" width="18" height="16" rx="2" /><path d="M9 4v16" /></svg>
+          </button>
           <div class="topbar-title-wrap">
             <div class="topbar-title-row">
               <h2 id="activeNoteTitle">Loading...</h2>
               <button id="activeNoteRenameButton" class="icon-button" type="button" hidden aria-label="Rename note" title="Rename">
-                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 20h9" /><path d="M16.5 3.5a2.12 2.12 0 0 1 3 3L7 19l-4 1 1-4Z" /></svg>
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7" /><path d="M18.5 2.5a2.12 2.12 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5Z" /></svg>
               </button>
             </div>
             <p id="activeNoteMeta">Choose a note to start editing.</p>
@@ -1279,6 +1330,9 @@
             <input id="searchInput" type="search" placeholder="Search notes..." autocomplete="off" />
           </div>
           <div class="topbar-actions">
+            <button id="downloadNoteButton" class="icon-button" type="button" hidden aria-label="Download note" title="Download note">
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 3v12" /><path d="m7 10 5 5 5-5" /><path d="M5 21h14" /></svg>
+            </button>
             <button id="activeNoteShareButton" class="share-button" type="button" hidden>
               <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="18" cy="5" r="3" /><circle cx="6" cy="12" r="3" /><circle cx="18" cy="19" r="3" /><path d="m8.6 13.5 6.8 4M15.4 6.5l-6.8 4" /></svg>
               Share
@@ -1436,7 +1490,13 @@
     const userChip = document.getElementById("userChip");
     const sidebarAvatar = document.getElementById("sidebarAvatar");
     const searchInput = document.getElementById("searchInput");
+    const sidebarResizer = document.getElementById("sidebarResizer");
+    const sidebarToggle = document.getElementById("sidebarToggle");
+    const downloadNoteButton = document.getElementById("downloadNoteButton");
     const clientId = crypto.randomUUID();
+
+    const SIDEBAR_MIN_WIDTH = 190;
+    const SIDEBAR_MAX_WIDTH = 460;
 
     let ws;
     let reconnectTimeoutId = null;
@@ -1460,7 +1520,11 @@
       theme: "sand",
       background: null,
       fontSize: 18,
+      sidebarWidth: 280,
+      sidebarCollapsed: false,
     };
+
+    let isResizingSidebar = false;
 
     const MIN_EDITOR_FONT_SIZE = 14;
     const MAX_EDITOR_FONT_SIZE = 32;
@@ -1621,6 +1685,9 @@
       root.setProperty("--primary-btn-bg", theme.primaryBtnBg);
       root.setProperty("--primary-btn-text", theme.primaryBtnText);
 
+      root.setProperty("--sidebar-width", `${preferences.sidebarWidth}px`);
+      appShell.classList.toggle("sidebar-collapsed", Boolean(preferences.sidebarCollapsed));
+
       editor.style.fontSize = `${preferences.fontSize}px`;
       fontPreview.style.fontSize = `${preferences.fontSize}px`;
       fontSizeValue.textContent = `${preferences.fontSize}px`;
@@ -1674,6 +1741,12 @@
       preferences.fontSize = Number.isFinite(Number(preferences.fontSize))
         ? Math.max(MIN_EDITOR_FONT_SIZE, Math.min(MAX_EDITOR_FONT_SIZE, Number(preferences.fontSize)))
         : 18;
+
+      preferences.sidebarWidth = Number.isFinite(Number(preferences.sidebarWidth))
+        ? Math.max(SIDEBAR_MIN_WIDTH, Math.min(SIDEBAR_MAX_WIDTH, Number(preferences.sidebarWidth)))
+        : 280;
+
+      preferences.sidebarCollapsed = Boolean(preferences.sidebarCollapsed);
 
       renderThemeCards();
       applyPreferences();
@@ -1824,6 +1897,7 @@
         activeNoteMeta.textContent = "Create your first private note from the sidebar.";
         activeNoteRenameButton.hidden = true;
         activeNoteShareButton.hidden = true;
+        downloadNoteButton.hidden = true;
         setEditorMarkup("");
         setEmptyState(true);
         renderNotes();
@@ -1838,6 +1912,7 @@
       activeNoteMeta.textContent = `Last updated ${formatUpdatedAt(note.updatedAt)}${roleLabel}`;
       activeNoteRenameButton.hidden = !canEditNoteRole(note.accessRole);
       activeNoteShareButton.hidden = note.accessRole !== "owner";
+      downloadNoteButton.hidden = false;
       setEditorMarkup(note.text || "");
       setEmptyState(false);
       syncActiveEditorAccess();
@@ -2674,6 +2749,80 @@
       searchQuery = searchInput.value;
       renderNotes();
     });
+
+    function setSidebarWidth(width) {
+      const clamped = Math.min(SIDEBAR_MAX_WIDTH, Math.max(SIDEBAR_MIN_WIDTH, Math.round(width)));
+      preferences.sidebarWidth = clamped;
+      document.documentElement.style.setProperty("--sidebar-width", `${clamped}px`);
+    }
+
+    sidebarResizer.addEventListener("pointerdown", (event) => {
+      if (preferences.sidebarCollapsed) {
+        return;
+      }
+
+      isResizingSidebar = true;
+      sidebarResizer.setPointerCapture(event.pointerId);
+      document.body.classList.add("body-resizing");
+      event.preventDefault();
+    });
+
+    sidebarResizer.addEventListener("pointermove", (event) => {
+      if (!isResizingSidebar) {
+        return;
+      }
+
+      setSidebarWidth(event.clientX);
+    });
+
+    function stopSidebarResize(event) {
+      if (!isResizingSidebar) {
+        return;
+      }
+
+      isResizingSidebar = false;
+      try {
+        sidebarResizer.releasePointerCapture(event.pointerId);
+      } catch (_error) {
+      }
+      document.body.classList.remove("body-resizing");
+      savePreferences();
+    }
+
+    sidebarResizer.addEventListener("pointerup", stopSidebarResize);
+    sidebarResizer.addEventListener("pointercancel", stopSidebarResize);
+
+    sidebarToggle.addEventListener("click", () => {
+      preferences.sidebarCollapsed = !preferences.sidebarCollapsed;
+      savePreferences();
+      appShell.classList.toggle("sidebar-collapsed", preferences.sidebarCollapsed);
+    });
+
+    function sanitizeFileName(name) {
+      const cleaned = (name || "note").replace(/[\\/:*?"<>|\n\r\t]+/g, "_").trim();
+      return (cleaned || "note").slice(0, 100);
+    }
+
+    function downloadActiveNote() {
+      if (!activeNoteId) {
+        return;
+      }
+
+      const summary = getActiveNoteSummary();
+      const title = summary ? summary.title : activeNoteTitle.textContent;
+      const text = editor.innerText || "";
+      const blob = new Blob([text], { type: "text/plain;charset=utf-8" });
+      const url = URL.createObjectURL(blob);
+      const link = document.createElement("a");
+      link.href = url;
+      link.download = `${sanitizeFileName(title)}.txt`;
+      document.body.appendChild(link);
+      link.click();
+      link.remove();
+      URL.revokeObjectURL(url);
+    }
+
+    downloadNoteButton.addEventListener("click", downloadActiveNote);
 
     sidebarNav.addEventListener("click", (event) => {
       const button = event.target.closest(".nav-item");
