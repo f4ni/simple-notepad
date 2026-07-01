@@ -14,6 +14,12 @@ const SESSION_SECRET = process.env.SESSION_SECRET;
 const SESSION_TTL_MS = 1000 * 60 * 60 * 24 * 30;
 const MAX_TITLE_LENGTH = 200;
 const MAX_NOTE_CONTENT_LENGTH = 1000000;
+const ADMIN_USERNAMES = new Set(
+  (process.env.ADMIN_USERNAMES || "")
+    .split(",")
+    .map((name) => name.trim().toLowerCase())
+    .filter(Boolean)
+);
 
 if (!DATABASE_URL) {
   console.error("Missing DATABASE_URL environment variable.");
@@ -159,6 +165,47 @@ function ensureAuthorized(req, res, next) {
 
   req.user = user;
   next();
+}
+
+function isAdminUser(user) {
+  return Boolean(user && ADMIN_USERNAMES.has(user.username));
+}
+
+function publicUser(user) {
+  return {
+    id: user.id,
+    username: user.username,
+    isAdmin: isAdminUser(user),
+  };
+}
+
+function ensureAdmin(req, res, next) {
+  if (!isAdminUser(req.user)) {
+    res.status(403).json({ error: "Admin access required." });
+    return;
+  }
+
+  next();
+}
+
+function getOnlineUserConnections() {
+  const connections = new Map();
+
+  if (!wss) {
+    return connections;
+  }
+
+  wss.clients.forEach((client) => {
+    if (
+      client.isAuthenticated &&
+      client.userId &&
+      client.readyState === WebSocket.OPEN
+    ) {
+      connections.set(client.userId, (connections.get(client.userId) || 0) + 1);
+    }
+  });
+
+  return connections;
 }
 
 function isValidPermissionRole(role) {
@@ -680,10 +727,7 @@ function attachAuthRoutes() {
 
       res.status(201).json({
         token,
-        user: {
-          id: user.id,
-          username: user.username,
-        },
+        user: publicUser(user),
       });
     } catch (error) {
       console.error("Failed to register:", error);
@@ -706,10 +750,7 @@ function attachAuthRoutes() {
 
       res.json({
         token,
-        user: {
-          id: user.id,
-          username: user.username,
-        },
+        user: publicUser(user),
       });
     } catch (error) {
       console.error("Failed to login:", error);
@@ -719,10 +760,7 @@ function attachAuthRoutes() {
 
   app.get("/api/auth/me", ensureAuthorized, (req, res) => {
     res.json({
-      user: {
-        id: req.user.id,
-        username: req.user.username,
-      },
+      user: publicUser(req.user),
     });
   });
 
@@ -754,10 +792,7 @@ function attachAuthRoutes() {
 
       res.json({
         token,
-        user: {
-          id: refreshedUser.id,
-          username: refreshedUser.username,
-        },
+        user: publicUser(refreshedUser),
       });
     } catch (error) {
       console.error("Failed to change password:", error);
@@ -1041,10 +1076,7 @@ function attachWebSocketServer(server) {
           ws.send(
             JSON.stringify({
               type: "init",
-              user: {
-                id: user.id,
-                username: user.username,
-              },
+              user: publicUser(user),
               notes,
               activeNote: firstNote
                 ? {
@@ -1090,10 +1122,101 @@ function attachWebSocketServer(server) {
   });
 }
 
+const DAY_MS = 1000 * 60 * 60 * 24;
+
+function buildAdminOverview() {
+  const online = getOnlineUserConnections();
+  const users = Array.from(usersCache.values());
+  const notes = Array.from(notesCache.values());
+  const now = Date.now();
+
+  let totalCharacters = 0;
+  let activeNotes24h = 0;
+  const notesOwnedByUser = new Map();
+
+  notes.forEach((note) => {
+    totalCharacters += (note.content || "").length;
+    notesOwnedByUser.set(note.owner_id, (notesOwnedByUser.get(note.owner_id) || 0) + 1);
+
+    if (note.updated_at && now - new Date(note.updated_at).getTime() < DAY_MS) {
+      activeNotes24h += 1;
+    }
+  });
+
+  let totalCollaborations = 0;
+  const sharedWithUser = new Map();
+
+  notePermissionsCache.forEach((userMap) => {
+    userMap.forEach((_role, userId) => {
+      totalCollaborations += 1;
+      sharedWithUser.set(userId, (sharedWithUser.get(userId) || 0) + 1);
+    });
+  });
+
+  let newUsers7d = 0;
+
+  const userRows = users
+    .map((user) => {
+      const createdAtMs = user.created_at ? new Date(user.created_at).getTime() : 0;
+
+      if (createdAtMs && now - createdAtMs < DAY_MS * 7) {
+        newUsers7d += 1;
+      }
+
+      return {
+        id: user.id,
+        username: user.username,
+        createdAt: user.created_at,
+        notesOwned: notesOwnedByUser.get(user.id) || 0,
+        sharedWith: sharedWithUser.get(user.id) || 0,
+        online: online.has(user.id),
+        connections: online.get(user.id) || 0,
+        isAdmin: isAdminUser(user),
+      };
+    })
+    .sort((left, right) => {
+      if (left.online !== right.online) {
+        return left.online ? -1 : 1;
+      }
+
+      return new Date(right.createdAt).getTime() - new Date(left.createdAt).getTime();
+    });
+
+  const onlineUsers = userRows
+    .filter((user) => user.online)
+    .map((user) => ({
+      id: user.id,
+      username: user.username,
+      connections: user.connections,
+    }));
+
+  return {
+    stats: {
+      users: users.length,
+      notes: notes.length,
+      collaborations: totalCollaborations,
+      online: online.size,
+      newUsers7d,
+      activeNotes24h,
+      totalCharacters,
+    },
+    onlineUsers,
+    users: userRows,
+    generatedAt: new Date().toISOString(),
+  };
+}
+
+function attachAdminRoutes() {
+  app.get("/api/admin/overview", ensureAuthorized, ensureAdmin, (_req, res) => {
+    res.json(buildAdminOverview());
+  });
+}
+
 async function start() {
   await initializeStorage();
   attachAuthRoutes();
   attachNoteRoutes();
+  attachAdminRoutes();
 
   const server = app.listen(PORT, () => {
     console.log("Running on port " + PORT);

@@ -73,9 +73,15 @@ The settings dialog holds four theme cards (sand, mist, forest, midnight), a bac
 
 `index.html` links a web manifest and registers `service-worker.js`. The service worker pre-caches the app shell (manifest and icons) and serves cached assets when offline, while always fetching the root document fresh from the network so the app code stays current. `electron-main.js` opens a 1280x840 window with the menu bar hidden, loads the URL from `ELECTRON_APP_URL`, and forces external links to open in the system browser.
 
+### Admin panel
+
+Accounts whose username is listed in the `ADMIN_USERNAMES` environment variable are admins. The comma-separated names are lowercased and matched against the stored username, so admin status is config driven, not a database flag. Admins get an "Admin Panel" button in the sidebar footer that opens a dialog with usage stats and live online users; everyone else never sees the button, and the endpoint returns 403 for non-admins regardless.
+
+The dialog polls `GET /api/admin/overview` every 5 seconds while open. That response is built from the in-memory caches plus the live WebSocket client list, so it needs no extra queries. Stats cover total users, notes, collaborations, characters stored, users online now, new users in the last 7 days, and notes touched in the last 24 hours. Below the stats it lists who is online (with their open tab count) and a table of every user showing join date, notes owned, notes shared to them, and online status. Online presence is derived from authenticated open WebSocket connections, so it reflects real-time connectivity rather than a stored session.
+
 ## API reference
 
-All note routes and `/api/auth/me` and `/api/auth/change-password` require a valid bearer token.
+All note routes, `/api/auth/me`, `/api/auth/change-password`, and `/api/admin/*` require a valid bearer token. The user object in auth responses includes `isAdmin`.
 
 Auth:
 
@@ -94,6 +100,10 @@ Notes:
 - `GET /api/notes/:id/shares`, lists collaborators (owner only).
 - `POST /api/notes/:id/share` with `{ username, role }` where role is `viewer` or `editor` (owner only).
 - `DELETE /api/notes/:id/share/:userId`, revokes a collaborator (owner only).
+
+Admin (requires an admin account):
+
+- `GET /api/admin/overview`, returns `{ stats, onlineUsers, users, generatedAt }`.
 
 ## WebSocket protocol
 
@@ -132,6 +142,7 @@ Set these (see `.env.example`):
 
 - `DATABASE_URL`: PostgreSQL connection string. Required; the server exits without it.
 - `SESSION_SECRET`: long random string used to sign session tokens. Required; the server exits without it.
+- `ADMIN_USERNAMES`: optional, comma-separated usernames that get the admin panel. Leave empty for no admins.
 - `PORT`: optional, defaults to 3000.
 
 Start the web server:

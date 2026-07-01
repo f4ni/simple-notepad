@@ -1108,6 +1108,119 @@
         background: var(--surface-2);
       }
 
+      .admin-button {
+        width: 100%;
+        display: inline-flex;
+        align-items: center;
+        justify-content: center;
+        gap: 8px;
+        font-size: 13px;
+      }
+
+      .admin-button svg {
+        width: 16px;
+        height: 16px;
+      }
+
+      .admin-card {
+        width: min(760px, 100%);
+        max-width: min(760px, 100%);
+      }
+
+      .admin-stats {
+        display: grid;
+        grid-template-columns: repeat(auto-fit, minmax(130px, 1fr));
+        gap: 10px;
+        margin-bottom: 20px;
+      }
+
+      .stat-card {
+        border: 1px solid var(--border);
+        border-radius: var(--radius-md);
+        padding: 14px;
+        background: var(--surface);
+      }
+
+      .stat-value {
+        font-size: 24px;
+        font-weight: 700;
+        letter-spacing: -0.01em;
+      }
+
+      .stat-label {
+        margin-top: 2px;
+        font-size: 12px;
+        color: var(--text-muted);
+      }
+
+      .status-dot {
+        display: inline-block;
+        width: 8px;
+        height: 8px;
+        border-radius: 999px;
+        background: var(--outline, #9aa7b5);
+        margin-right: 6px;
+        vertical-align: middle;
+      }
+
+      .status-dot.online {
+        background: #2fae66;
+      }
+
+      .admin-badge {
+        display: inline-block;
+        margin-left: 6px;
+        padding: 1px 7px;
+        border-radius: 999px;
+        font-size: 10px;
+        font-weight: 700;
+        letter-spacing: 0.04em;
+        text-transform: uppercase;
+        background: var(--accent);
+        color: var(--accent-contrast);
+      }
+
+      .admin-table-wrap {
+        max-height: 300px;
+        overflow: auto;
+        border: 1px solid var(--border);
+        border-radius: var(--radius-md);
+      }
+
+      .admin-table {
+        width: 100%;
+        border-collapse: collapse;
+        font-size: 13px;
+      }
+
+      .admin-table th {
+        position: sticky;
+        top: 0;
+        text-align: left;
+        font-weight: 600;
+        color: var(--text-muted);
+        background: var(--surface);
+        padding: 9px 12px;
+        border-bottom: 1px solid var(--border);
+        white-space: nowrap;
+      }
+
+      .admin-table td {
+        padding: 9px 12px;
+        border-bottom: 1px solid var(--border);
+        vertical-align: middle;
+      }
+
+      .admin-table tbody tr:last-child td {
+        border-bottom: 0;
+      }
+
+      .admin-updated {
+        margin: 14px 0 0;
+        font-size: 12px;
+        color: var(--text-muted);
+      }
+
       [hidden] {
         display: none !important;
       }
@@ -1317,6 +1430,49 @@
       </div>
     </div>
 
+    <div id="adminBackdrop" class="modal-backdrop" hidden>
+      <div class="modal-card admin-card">
+        <div class="modal-head">
+          <div>
+            <h3>Admin panel</h3>
+            <p class="modal-sub">Usage stats and who is online right now.</p>
+          </div>
+          <button id="adminClose" class="icon-button" type="button" aria-label="Close">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M18 6 6 18M6 6l12 12" /></svg>
+          </button>
+        </div>
+
+        <div id="adminError" class="settings-error"></div>
+
+        <div id="adminStats" class="admin-stats"></div>
+
+        <div class="settings-section">
+          <span class="label-caps">Online now (<span id="adminOnlineCount">0</span>)</span>
+          <div id="adminOnlineList" class="collab-list"></div>
+        </div>
+
+        <div class="settings-section" style="margin-bottom: 0">
+          <span class="label-caps">Users</span>
+          <div class="admin-table-wrap">
+            <table class="admin-table">
+              <thead>
+                <tr>
+                  <th>User</th>
+                  <th>Joined</th>
+                  <th>Notes</th>
+                  <th>Shared</th>
+                  <th>Status</th>
+                </tr>
+              </thead>
+              <tbody id="adminUsersBody"></tbody>
+            </table>
+          </div>
+        </div>
+
+        <p id="adminUpdated" class="admin-updated"></p>
+      </div>
+    </div>
+
     <div id="appShell" class="app-shell" hidden>
       <header class="app-header">
         <div class="header-brand">
@@ -1389,6 +1545,10 @@
             <div id="sidebarAvatar" class="user-avatar"></div>
             <div id="userChip" class="user-chip"></div>
           </div>
+          <button id="adminButton" class="btn-ghost admin-button" type="button" hidden>
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 3v18h18" /><rect x="7" y="11" width="3" height="6" /><rect x="12" y="7" width="3" height="10" /><rect x="17" y="13" width="3" height="4" /></svg>
+            Admin Panel
+          </button>
           <div class="sidebar-footer-actions">
             <button id="settingsButton" class="btn-ghost" type="button">
               <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="3" /><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 1 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-4 0v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 1 1-2.83-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1 0-4h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 1 1 2.83-2.83l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 1 1 2.83 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1Z" /></svg>
@@ -1558,7 +1718,18 @@
     const sidebarResizer = document.getElementById("sidebarResizer");
     const sidebarToggle = document.getElementById("sidebarToggle");
     const downloadNoteButton = document.getElementById("downloadNoteButton");
+    const adminButton = document.getElementById("adminButton");
+    const adminBackdrop = document.getElementById("adminBackdrop");
+    const adminClose = document.getElementById("adminClose");
+    const adminError = document.getElementById("adminError");
+    const adminStats = document.getElementById("adminStats");
+    const adminOnlineCount = document.getElementById("adminOnlineCount");
+    const adminOnlineList = document.getElementById("adminOnlineList");
+    const adminUsersBody = document.getElementById("adminUsersBody");
+    const adminUpdated = document.getElementById("adminUpdated");
     const clientId = crypto.randomUUID();
+
+    let adminIntervalId = null;
 
     const SIDEBAR_MIN_WIDTH = 190;
     const SIDEBAR_MAX_WIDTH = 460;
@@ -2012,7 +2183,9 @@
       activeNoteAccessRole = null;
       userChip.textContent = "";
       sidebarAvatar.textContent = "";
+      adminButton.hidden = true;
       closeSettingsModal();
+      closeAdminPanel();
       shareBackdrop.hidden = true;
       setActiveNote(null);
     }
@@ -2217,6 +2390,7 @@
       currentUser = user;
       userChip.textContent = `Signed in as ${user.username}`;
       sidebarAvatar.textContent = getInitials(user.username);
+      adminButton.hidden = !user.isAdmin;
     }
 
     async function hydrateSession() {
@@ -2889,6 +3063,162 @@
 
     downloadNoteButton.addEventListener("click", downloadActiveNote);
 
+    function formatNumber(value) {
+      return Number(value || 0).toLocaleString();
+    }
+
+    function formatJoinedDate(value) {
+      if (!value) {
+        return "-";
+      }
+
+      return new Date(value).toLocaleDateString();
+    }
+
+    function renderAdminOverview(data) {
+      const stats = data.stats || {};
+      const cards = [
+        { label: "Total users", value: stats.users },
+        { label: "Online now", value: stats.online },
+        { label: "Notes", value: stats.notes },
+        { label: "Collaborations", value: stats.collaborations },
+        { label: "New users (7d)", value: stats.newUsers7d },
+        { label: "Active notes (24h)", value: stats.activeNotes24h },
+        { label: "Characters stored", value: stats.totalCharacters },
+      ];
+
+      adminStats.innerHTML = "";
+      cards.forEach((card) => {
+        const cell = document.createElement("div");
+        cell.className = "stat-card";
+        const value = document.createElement("div");
+        value.className = "stat-value";
+        value.textContent = formatNumber(card.value);
+        const label = document.createElement("div");
+        label.className = "stat-label";
+        label.textContent = card.label;
+        cell.appendChild(value);
+        cell.appendChild(label);
+        adminStats.appendChild(cell);
+      });
+
+      const onlineUsers = data.onlineUsers || [];
+      adminOnlineCount.textContent = String(onlineUsers.length);
+      adminOnlineList.innerHTML = "";
+
+      if (!onlineUsers.length) {
+        const hint = document.createElement("div");
+        hint.className = "collab-sub";
+        hint.textContent = "Nobody is online right now.";
+        adminOnlineList.appendChild(hint);
+      } else {
+        onlineUsers.forEach((user) => {
+          const row = document.createElement("div");
+          row.className = "collab-row";
+
+          const avatar = document.createElement("div");
+          avatar.className = "user-avatar";
+          avatar.textContent = getInitials(user.username);
+
+          const meta = document.createElement("div");
+          meta.className = "collab-meta";
+          const name = document.createElement("div");
+          name.className = "collab-name";
+          name.textContent = user.username;
+          meta.appendChild(name);
+
+          const conn = document.createElement("div");
+          conn.className = "collab-role";
+          const count = user.connections || 1;
+          conn.textContent = count > 1 ? `${count} tabs` : "1 tab";
+
+          row.appendChild(avatar);
+          row.appendChild(meta);
+          row.appendChild(conn);
+          adminOnlineList.appendChild(row);
+        });
+      }
+
+      const users = data.users || [];
+      adminUsersBody.innerHTML = "";
+      users.forEach((user) => {
+        const row = document.createElement("tr");
+
+        const nameCell = document.createElement("td");
+        nameCell.textContent = user.username;
+        if (user.isAdmin) {
+          const badge = document.createElement("span");
+          badge.className = "admin-badge";
+          badge.textContent = "Admin";
+          nameCell.appendChild(badge);
+        }
+
+        const joinedCell = document.createElement("td");
+        joinedCell.textContent = formatJoinedDate(user.createdAt);
+
+        const notesCell = document.createElement("td");
+        notesCell.textContent = formatNumber(user.notesOwned);
+
+        const sharedCell = document.createElement("td");
+        sharedCell.textContent = formatNumber(user.sharedWith);
+
+        const statusCell = document.createElement("td");
+        const dot = document.createElement("span");
+        dot.className = "status-dot" + (user.online ? " online" : "");
+        statusCell.appendChild(dot);
+        statusCell.appendChild(document.createTextNode(user.online ? "Online" : "Offline"));
+
+        row.appendChild(nameCell);
+        row.appendChild(joinedCell);
+        row.appendChild(notesCell);
+        row.appendChild(sharedCell);
+        row.appendChild(statusCell);
+        adminUsersBody.appendChild(row);
+      });
+
+      if (data.generatedAt) {
+        adminUpdated.textContent = `Updated ${new Date(data.generatedAt).toLocaleTimeString()}`;
+      }
+    }
+
+    async function loadAdminOverview() {
+      try {
+        const data = await fetchJson("/api/admin/overview");
+        adminError.textContent = "";
+        renderAdminOverview(data);
+      } catch (error) {
+        adminError.textContent = error.message || "Could not load admin data.";
+      }
+    }
+
+    function openAdminPanel() {
+      if (!currentUser || !currentUser.isAdmin) {
+        return;
+      }
+
+      adminError.textContent = "";
+      adminBackdrop.hidden = false;
+      loadAdminOverview();
+      clearInterval(adminIntervalId);
+      adminIntervalId = setInterval(() => {
+        loadAdminOverview().catch(() => {});
+      }, 5000);
+    }
+
+    function closeAdminPanel() {
+      adminBackdrop.hidden = true;
+      clearInterval(adminIntervalId);
+      adminIntervalId = null;
+    }
+
+    adminButton.addEventListener("click", openAdminPanel);
+    adminClose.addEventListener("click", closeAdminPanel);
+    adminBackdrop.addEventListener("click", (event) => {
+      if (event.target === adminBackdrop) {
+        closeAdminPanel();
+      }
+    });
+
     sidebarNav.addEventListener("click", (event) => {
       const button = event.target.closest(".nav-item");
 
@@ -3013,6 +3343,8 @@
         closeShareDialog();
       } else if (!settingsBackdrop.hidden) {
         closeSettingsModal();
+      } else if (!adminBackdrop.hidden) {
+        closeAdminPanel();
       }
     });
 
@@ -3023,6 +3355,7 @@
 
     window.addEventListener("beforeunload", () => {
       clearInterval(syncIntervalId);
+      clearInterval(adminIntervalId);
       clearTimeout(reconnectTimeoutId);
       clearTimeout(sendTimeoutId);
       if (ws && ws.readyState === WebSocket.OPEN) {
